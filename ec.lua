@@ -1,4 +1,4 @@
---// Fluent + SaveManager Setup //--
+--// Fluent + SaveMaasdasdasdsanager Setup //--
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 
@@ -70,7 +70,7 @@ do
     -- UI Elements
     EnchantTab:AddParagraph({ Title = "Enchant Reroller", Content = "Automatically reroll enchants on selected pets until the desired one is obtained." })
     
-    -- Bugfix: Define StatusLabel *before* any buttons that use it.
+    -- Bugfix: Define StatusLabel *before* any buttons that use it. And Corrected AddLabel typo.
     local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
     StatusLabel.Content.TextWrapped = true
 
@@ -381,6 +381,6 @@ SaveManager:Load()
 
 Fluent:Notify({
     Title = "Script Updated",
-    Content = "Reroller now uses Workspace pets & bug is fixed.",
+    Content = "Typo 'Addlabel' has been corrected to 'AddLabel'.",
     Duration = 8
 })
