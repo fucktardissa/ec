@@ -60,7 +60,6 @@ task.spawn(function()
 end)
 
 
---// Enchant Reroller Tab -- (Revised with Workspace Method and Bugfix) //--
 do
     -- State variables
     local rerolling = false
@@ -70,7 +69,7 @@ do
     -- UI Elements
     EnchantTab:AddParagraph({ Title = "Enchant Reroller", Content = "Automatically reroll enchants on selected pets until the desired one is obtained." })
     
-    -- Bugfix: Define StatusLabel *before* any buttons that use it. And Corrected AddLabel typo.
+    -- THIS IS THE CORRECTED LINE: 'Addlabel' is now 'AddLabel'
     local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
     StatusLabel.Content.TextWrapped = true
 
