@@ -1,4 +1,4 @@
---// Fluent + SaveManager Setup //--
+--// Fluent + SaveMaasdasdasdasddsaasdasdsadnager Setup //--
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 
@@ -60,66 +60,76 @@ task.spawn(function()
 end)
 
 
---// Enchant Reroller Tab -- (Merged from Script 1) //--
+--// Enchant Reroller Tab -- (Revised with Dropdown) //--
 do
     -- State variables
     local rerolling = false
     local selectedPetIds = {}
-    
+    local allPetsCache = {}
+
     EnchantTab:AddParagraph({ Title = "Enchant Reroller", Content = "Automatically reroll enchants on selected pets until the desired one is obtained." })
 
-    -- UI Elements
-    local PetSearchInput = EnchantTab:AddInput("PetSearch", {
-        Title = "Search Pet Name",
-        Default = "",
-        Placeholder = "Leave empty to show all pets..."
-    })
+    -- Section for individual pet toggles
+    local IndividualPetSection = EnchantTab:AddSection("Select Individual Pets")
 
-    local PetListSection = EnchantTab:AddSection("Select Pets")
-
-    local EnchantNameInput = EnchantTab:AddInput("EnchantName", {
-        Title = "Target Enchant Name",
-        Default = "",
-        Placeholder = "e.g., Agility"
-    })
-
-    local EnchantLevelInput = EnchantTab:AddInput("EnchantLevel", {
-        Title = "Target Enchant Level",
-        Default = "",
-        Placeholder = "e.g., 8"
-    })
+    -- Forward declaration for circular dependency
+    local updateIndividualPetList
     
-    local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
-    StatusLabel.Content.TextWrapped = true
+    -- Dropdown for pet names
+    local PetNameDropdown = EnchantTab:AddDropdown("PetNameSelector", {
+        Title = "1. Select Pet by Name",
+        Values = { "- Use 'Refresh Pet List' -" },
+        Default = 1,
+        Callback = function(selectedName)
+            if updateIndividualPetList then
+                updateIndividualPetList(selectedName)
+            end
+        end
+    })
 
-    -- Function to populate/update the pet list
-    local function updatePetList(filterText)
-        PetListSection.Container:ClearAllChildren() -- Clear previous toggles
-        filterText = string.lower(filterText or "")
+    -- Function to populate the main dropdown with unique pet names
+    local function populatePetNameDropdown()
+        pcall(function()
+            local petNamesSet = { ["All Pets"] = true }
+            allPetsCache = LocalData:Get().Pets or {}
 
-        local data = LocalData:Get()
-        if not data or not data.Pets then return end
+            for _, pet in pairs(allPetsCache) do
+                local petName = pet.Name or pet.name or pet._name or "Unknown"
+                petNamesSet[petName] = true
+            end
+            
+            local petNamesList = {}
+            for name in pairs(petNamesSet) do
+                table.insert(petNamesList, name)
+            end
+            table.sort(petNamesList)
+            
+            PetNameDropdown:SetValues(petNamesList)
+        end)
+    end
+    
+    -- Function to show toggles for the selected group of pets
+    updateIndividualPetList = function(selectedName)
+        IndividualPetSection.Container:ClearAllChildren()
+        if not selectedName or selectedName == "- Use 'Refresh Pet List' -" then return end
 
         local petsToShow = {}
-        for _, pet in pairs(data.Pets) do
+        for _, pet in pairs(allPetsCache) do
             local petName = pet.Name or pet.name or pet._name or "Unknown"
-            if filterText == "" or string.find(string.lower(petName), filterText) then
+            if selectedName == "All Pets" or petName == selectedName then
                 table.insert(petsToShow, pet)
             end
         end
-        
-        table.sort(petsToShow, function(a, b)
-            local aName = a.Name or a.name or a._name or "Unknown"
-            local bName = b.Name or b.name or b._name or "Unknown"
-            return aName < bName
-        end)
-        
+
+        table.sort(petsToShow, function(a, b) return (a.Id or 0) < (b.Id or 0) end)
+
         for _, pet in ipairs(petsToShow) do
-            local petName = pet.Name or pet.name or pet._name or "Unknown"
             local petId = pet.Id
-            
-            PetListSection:AddToggle("PetToggle_" .. tostring(petId), {
-                Title = petName,
+            local petName = pet.Name or pet.name or pet._name or "Unknown"
+            local toggleTitle = string.format("%s [ID: %s]", petName, tostring(petId))
+
+            IndividualPetSection:AddToggle("PetToggle_" .. tostring(petId), {
+                Title = toggleTitle,
                 Default = selectedPetIds[petId] or false,
                 Callback = function(value)
                     selectedPetIds[petId] = value and true or nil
@@ -128,15 +138,13 @@ do
         end
     end
 
-    -- Connect search input to the update function
-    Fluent:GetOption("PetSearch").OnChanged:Connect(function(text)
-        updatePetList(text)
-    end)
-
     EnchantTab:AddButton({
         Title = "Refresh Pet List",
         Callback = function()
-            updatePetList(Options.PetSearch.Value)
+            StatusLabel:SetText("Refreshing pet list...")
+            populatePetNameDropdown()
+            updateIndividualPetList(Options.PetNameSelector.Value)
+            StatusLabel:SetText("Status: Waiting...")
         end
     })
 
@@ -144,11 +152,24 @@ do
         Title = "Deselect All Pets",
         Callback = function()
             table.clear(selectedPetIds)
-            updatePetList(Options.PetSearch.Value) -- Redraw toggles to show deselected state
+            updateIndividualPetList(Options.PetNameSelector.Value) -- Redraw toggles to show deselected state
         end
     })
+    
+    EnchantTab:AddParagraph({Title = "2. Configure Target Enchant"})
 
-    -- Reroll Logic
+    local EnchantNameInput = EnchantTab:AddInput("EnchantName", {
+        Title = "Target Enchant Name", Default = "", Placeholder = "e.g., Agility"
+    })
+
+    local EnchantLevelInput = EnchantTab:AddInput("EnchantLevel", {
+        Title = "Target Enchant Level", Default = "", Placeholder = "e.g., 8"
+    })
+    
+    local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
+    StatusLabel.Content.TextWrapped = true
+
+    -- Reroll Logic (remains mostly the same)
     local function hasDesiredEnchant(pet, id, lvl)
         if not pet or not pet.Enchants then return false end
         for _, enchant in pairs(pet.Enchants) do
@@ -186,14 +207,10 @@ do
                     local rerollQueue = {}
                     local playerData = LocalData:Get()
                     
-                    -- Check all selected pets and add them to the queue if they don't have the enchant
                     for petId, _ in pairs(selectedPetIds) do
                         local currentPet
                         for _, p in pairs(playerData.Pets or {}) do
-                            if p.Id == petId then
-                                currentPet = p
-                                break
-                            end
+                            if p.Id == petId then currentPet = p; break end
                         end
 
                         if currentPet and not hasDesiredEnchant(currentPet, targetEnchant, targetLevel) then
@@ -203,33 +220,29 @@ do
                     
                     if #rerollQueue == 0 then
                         StatusLabel:SetText("✅ All selected pets have the desired enchant. Monitoring...")
-                        task.wait(2) -- Wait before next check
-                        continue -- Skip to the next iteration of the main while loop
+                        task.wait(2)
+                        continue
                     end
 
-                    -- Process the queue
                     for _, petIdToReroll in ipairs(rerollQueue) do
                         if not rerolling then break end
                         
                         local currentPet
                         for _, p in pairs(LocalData:Get().Pets or {}) do
-                            if p.Id == petIdToReroll then
-                                currentPet = p
-                                break
-                            end
+                            if p.Id == petIdToReroll then currentPet = p; break end
                         end
                         
                         if currentPet and not hasDesiredEnchant(currentPet, targetEnchant, targetLevel) then
                             local petDisplayName = currentPet.Name or currentPet.name or currentPet._name or petIdToReroll
                             StatusLabel:SetText("🔁 Rerolling " .. petDisplayName)
                             EnchantRerollFunction:InvokeServer("RerollEnchants", petIdToReroll, "Gems")
-                            task.wait(0.3) -- Wait between reroll invokes
+                            task.wait(0.3)
                         else
                              local petDisplayName = currentPet and (currentPet.Name or currentPet.name or currentPet._name) or petIdToReroll
                              StatusLabel:SetText("✅ " .. petDisplayName .. " has desired enchant.")
                         end
                     end
-                    task.wait(0.5) -- Wait after processing the whole queue
+                    task.wait(0.5)
                 end
                 StatusLabel:SetText("⏹️ Reroll stopped.")
             end)()
@@ -246,8 +259,8 @@ do
         end
     })
     
-    -- Initial pet list population
-    updatePetList("")
+    -- Initial pet list population (deferred to allow UI to build)
+    task.defer(populatePetNameDropdown)
 end
 
 
