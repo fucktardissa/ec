@@ -8,7 +8,7 @@ local Players = game:GetService("Players")
 -- Framework components
 local LocalPlayer = Players.LocalPlayer
 -- NOTE: Adjust these paths if your framework structure is different.
-local Fluent = require(ReplicatedStorage.Client.Framework.Fluent)
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local RemoteFunction = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteFunction
 
