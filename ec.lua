@@ -1,5 +1,4 @@
--- Revamped Main GUI Script (LocalScript)
--- Uses the Fluent UI library for a clean and modern interface.
+local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Fluent.lua"))()
 
 --// Services & Modules
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,7 +7,6 @@ local Players = game:GetService("Players")
 -- Framework components
 local LocalPlayer = Players.LocalPlayer
 -- NOTE: Adjust these paths if your framework structure is different.
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local RemoteFunction = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteFunction
 
