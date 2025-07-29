@@ -1,4 +1,4 @@
---// Fluent + SaveMaasdasdasdasddsaasdasdsadnager Setup //--
+--// Fluent + SaveManager Setup //--
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 
@@ -16,6 +16,7 @@ local Window = Fluent:CreateWindow({
 --// Services & Variables //--
 -- Services
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -26,7 +27,7 @@ local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
--- Game-specific Remotes & Modules (from both scripts)
+-- Game-specific Remotes & Modules
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local EnchantRerollFunction = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteFunction
 local QuestRerollEvent = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
@@ -51,8 +52,7 @@ task.spawn(function()
     }
     pcall(function()
         request({
-            Url = webhookURL,
-            Method = "POST",
+            Url = webhookURL, Method = "POST",
             Headers = { ["Content-Type"] = "application/json" },
             Body = HttpService:JSONEncode(data)
         })
@@ -60,22 +60,23 @@ task.spawn(function()
 end)
 
 
---// Enchant Reroller Tab -- (Revised with Dropdown) //--
+--// Enchant Reroller Tab -- (Revised with Workspace Method and Bugfix) //--
 do
     -- State variables
     local rerolling = false
     local selectedPetIds = {}
-    local allPetsCache = {}
+    local workspacePetsCache = {}
 
+    -- UI Elements
     EnchantTab:AddParagraph({ Title = "Enchant Reroller", Content = "Automatically reroll enchants on selected pets until the desired one is obtained." })
-
-    -- Section for individual pet toggles
-    local IndividualPetSection = EnchantTab:AddSection("Select Individual Pets")
-
-    -- Forward declaration for circular dependency
-    local updateIndividualPetList
     
-    -- Dropdown for pet names
+    -- Bugfix: Define StatusLabel *before* any buttons that use it.
+    local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
+    StatusLabel.Content.TextWrapped = true
+
+    local IndividualPetSection = EnchantTab:AddSection("Select Individual Pets")
+    local updateIndividualPetList -- Forward declaration
+
     local PetNameDropdown = EnchantTab:AddDropdown("PetNameSelector", {
         Title = "1. Select Pet by Name",
         Values = { "- Use 'Refresh Pet List' -" },
@@ -87,15 +88,23 @@ do
         end
     })
 
-    -- Function to populate the main dropdown with unique pet names
-    local function populatePetNameDropdown()
-        pcall(function()
+    -- Function to populate lists from Workspace.Markers.Pets
+    local function populatePetLists()
+        local success, err = pcall(function()
             local petNamesSet = { ["All Pets"] = true }
-            allPetsCache = LocalData:Get().Pets or {}
+            table.clear(workspacePetsCache)
 
-            for _, pet in pairs(allPetsCache) do
-                local petName = pet.Name or pet.name or pet._name or "Unknown"
-                petNamesSet[petName] = true
+            local petsMarkersFolder = Workspace:WaitForChild("Markers"):WaitForChild("Pets")
+            local localUserId = player.UserId
+
+            for _, petMarker in ipairs(petsMarkersFolder:GetChildren()) do
+                if petMarker:IsA("Folder") and petMarker:GetAttribute("OwnerId") == localUserId then
+                    local petName = petMarker:GetAttribute("Name") or "Unknown"
+                    local petId = petMarker.Name -- The folder's name is the unique Pet ID
+                    
+                    petNamesSet[petName] = true
+                    table.insert(workspacePetsCache, { Name = petName, Id = petId })
+                end
             end
             
             local petNamesList = {}
@@ -106,6 +115,9 @@ do
             
             PetNameDropdown:SetValues(petNamesList)
         end)
+        if not success then
+            StatusLabel:SetText("Error finding pets: " .. tostring(err))
+        end
     end
     
     -- Function to show toggles for the selected group of pets
@@ -114,25 +126,22 @@ do
         if not selectedName or selectedName == "- Use 'Refresh Pet List' -" then return end
 
         local petsToShow = {}
-        for _, pet in pairs(allPetsCache) do
-            local petName = pet.Name or pet.name or pet._name or "Unknown"
-            if selectedName == "All Pets" or petName == selectedName then
-                table.insert(petsToShow, pet)
+        for _, petData in pairs(workspacePetsCache) do
+            if selectedName == "All Pets" or petData.Name == selectedName then
+                table.insert(petsToShow, petData)
             end
         end
 
-        table.sort(petsToShow, function(a, b) return (a.Id or 0) < (b.Id or 0) end)
+        table.sort(petsToShow, function(a, b) return a.Id < b.Id end)
 
-        for _, pet in ipairs(petsToShow) do
-            local petId = pet.Id
-            local petName = pet.Name or pet.name or pet._name or "Unknown"
-            local toggleTitle = string.format("%s [ID: %s]", petName, tostring(petId))
+        for _, petData in ipairs(petsToShow) do
+            local toggleTitle = string.format("%s [ID: %s]", petData.Name, petData.Id:sub(1, 8)) -- Show first part of ID
 
-            IndividualPetSection:AddToggle("PetToggle_" .. tostring(petId), {
+            IndividualPetSection:AddToggle("PetToggle_" .. petData.Id, {
                 Title = toggleTitle,
-                Default = selectedPetIds[petId] or false,
+                Default = selectedPetIds[petData.Id] or false,
                 Callback = function(value)
-                    selectedPetIds[petId] = value and true or nil
+                    selectedPetIds[petData.Id] = value and true or nil
                 end
             })
         end
@@ -141,8 +150,8 @@ do
     EnchantTab:AddButton({
         Title = "Refresh Pet List",
         Callback = function()
-            StatusLabel:SetText("Refreshing pet list...")
-            populatePetNameDropdown()
+            StatusLabel:SetText("Refreshing pet list from workspace...")
+            populatePetLists()
             updateIndividualPetList(Options.PetNameSelector.Value)
             StatusLabel:SetText("Status: Waiting...")
         end
@@ -152,24 +161,19 @@ do
         Title = "Deselect All Pets",
         Callback = function()
             table.clear(selectedPetIds)
-            updateIndividualPetList(Options.PetNameSelector.Value) -- Redraw toggles to show deselected state
+            updateIndividualPetList(Options.PetNameSelector.Value)
         end
     })
     
     EnchantTab:AddParagraph({Title = "2. Configure Target Enchant"})
-
     local EnchantNameInput = EnchantTab:AddInput("EnchantName", {
         Title = "Target Enchant Name", Default = "", Placeholder = "e.g., Agility"
     })
-
     local EnchantLevelInput = EnchantTab:AddInput("EnchantLevel", {
         Title = "Target Enchant Level", Default = "", Placeholder = "e.g., 8"
     })
-    
-    local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
-    StatusLabel.Content.TextWrapped = true
 
-    -- Reroll Logic (remains mostly the same)
+    -- Reroll Logic
     local function hasDesiredEnchant(pet, id, lvl)
         if not pet or not pet.Enchants then return false end
         for _, enchant in pairs(pet.Enchants) do
@@ -184,20 +188,9 @@ do
         Title = "▶ Start Rerolling",
         Callback = function()
             if rerolling then return end
-
-            local targetEnchant = Options.EnchantName.Value
-            local targetLevel = tonumber(Options.EnchantLevel.Value)
-            local petsToReroll = {}
-            for id in pairs(selectedPetIds) do table.insert(petsToReroll, id) end
-            
-            if #petsToReroll == 0 then
-                StatusLabel:SetText("⚠️ Select at least one pet.")
-                return
-            end
-            if not targetEnchant or targetEnchant == "" or not targetLevel then
-                StatusLabel:SetText("⚠️ Enter a valid enchant name and level.")
-                return
-            end
+            local targetEnchant, targetLevel = Options.EnchantName.Value, tonumber(Options.EnchantLevel.Value)
+            if not next(selectedPetIds) then StatusLabel:SetText("⚠️ Select at least one pet."); return end
+            if not targetEnchant or targetEnchant == "" or not targetLevel then StatusLabel:SetText("⚠️ Enter a valid enchant name and level."); return end
 
             rerolling = true
             StatusLabel:SetText("⏳ Starting reroll...")
@@ -205,14 +198,13 @@ do
             coroutine.wrap(function()
                 while rerolling do
                     local rerollQueue = {}
-                    local playerData = LocalData:Get()
+                    local playerData = LocalData:Get() -- Still need LocalData to check enchants
                     
-                    for petId, _ in pairs(selectedPetIds) do
+                    for petId in pairs(selectedPetIds) do
                         local currentPet
                         for _, p in pairs(playerData.Pets or {}) do
                             if p.Id == petId then currentPet = p; break end
                         end
-
                         if currentPet and not hasDesiredEnchant(currentPet, targetEnchant, targetLevel) then
                             table.insert(rerollQueue, currentPet.Id)
                         end
@@ -220,26 +212,20 @@ do
                     
                     if #rerollQueue == 0 then
                         StatusLabel:SetText("✅ All selected pets have the desired enchant. Monitoring...")
-                        task.wait(2)
-                        continue
+                        task.wait(2); continue
                     end
 
                     for _, petIdToReroll in ipairs(rerollQueue) do
                         if not rerolling then break end
-                        
                         local currentPet
                         for _, p in pairs(LocalData:Get().Pets or {}) do
                             if p.Id == petIdToReroll then currentPet = p; break end
                         end
-                        
                         if currentPet and not hasDesiredEnchant(currentPet, targetEnchant, targetLevel) then
                             local petDisplayName = currentPet.Name or currentPet.name or currentPet._name or petIdToReroll
                             StatusLabel:SetText("🔁 Rerolling " .. petDisplayName)
                             EnchantRerollFunction:InvokeServer("RerollEnchants", petIdToReroll, "Gems")
                             task.wait(0.3)
-                        else
-                             local petDisplayName = currentPet and (currentPet.Name or currentPet.name or currentPet._name) or petIdToReroll
-                             StatusLabel:SetText("✅ " .. petDisplayName .. " has desired enchant.")
                         end
                     end
                     task.wait(0.5)
@@ -259,8 +245,7 @@ do
         end
     })
     
-    -- Initial pet list population (deferred to allow UI to build)
-    task.defer(populatePetNameDropdown)
+    task.defer(populatePetLists) -- Initial population
 end
 
 
@@ -300,9 +285,7 @@ do
     local function hatchEgg(eggName)
         local pos = eggPositions[eggName]
         if pos then
-            local tween = tweenToPosition(pos)
-            tween.Completed:Wait()
-            while (humanoidRootPart.Position - pos).Magnitude > 5 do task.wait(0.1) end
+            tweenToPosition(pos).Completed:Wait()
         end
     end
 
@@ -319,11 +302,10 @@ do
                 local repeatableTasks = {}
                 for index, frame in ipairs(templates) do
                     if index == 3 or index == 4 then
-                        local content = frame:FindFirstChild("Content")
-                        local titleLabel = content and content:FindFirstChild("Label")
-                        local typeLabel = content and content:FindFirstChild("Type")
+                        local titleLabel = frame:FindFirstChild("Content"):FindFirstChild("Label")
+                        local typeLabel = frame:FindFirstChild("Content"):FindFirstChild("Type")
                         if titleLabel and typeLabel then
-                            table.insert(repeatableTasks, {frame = frame, title = titleLabel.Text, type = typeLabel.Text, slot = index})
+                            table.insert(repeatableTasks, {title = titleLabel.Text, type = typeLabel.Text, slot = index})
                         end
                     end
                 end
@@ -331,24 +313,20 @@ do
                 local highestPriorityAction = nil
                 local protectedSlots = {}
                 for _, questData in ipairs(quests) do
-                    local toggle = questToggles[questData.ID]
-                    if toggle and toggle.Value then
+                    if questToggles[questData.ID] and questToggles[questData.ID].Value then
                         for _, task in ipairs(repeatableTasks) do
                             local lowerTitle = task.title:lower():gsub("%s+", " ")
                             if task.type == "Repeatable" and lowerTitle:find(questData.Pattern, 1, true) then
-                                if not protectedSlots[task.slot] then protectedSlots[task.slot] = true end
+                                protectedSlots[task.slot] = true
                                 if not highestPriorityAction then
                                     local matchedEgg = nil
                                     for eggName in pairs(eggPositions) do
                                         if lowerTitle:find(eggName:lower():gsub(" egg", ""), 1, true) then
-                                            matchedEgg = eggName
-                                            break
+                                            matchedEgg = eggName; break
                                         end
                                     end
-                                    local selectedOption = Options["EggFor_"..questData.ID]
-                                    local fallbackEgg = (selectedOption and selectedOption.Value) or questData.DefaultEgg
-                                    local eggToHatch = matchedEgg or fallbackEgg
-                                    highestPriorityAction = { egg = eggToHatch, title = task.title }
+                                    local fallbackEgg = (Options["EggFor_"..questData.ID] and Options["EggFor_"..questData.ID].Value) or questData.DefaultEgg
+                                    highestPriorityAction = { egg = matchedEgg or fallbackEgg }
                                 end
                             end
                         end
@@ -356,7 +334,6 @@ do
                 end
 
                 if highestPriorityAction then hatchEgg(highestPriorityAction.egg) end
-
                 for _, task in ipairs(repeatableTasks) do
                     if task.type == "Repeatable" and not protectedSlots[task.slot] then
                         QuestRerollEvent:FireServer("CompetitiveReroll", task.slot)
@@ -370,8 +347,7 @@ do
     end
 
     MainTab:AddToggle("AutoTasks", {
-        Title = "Enable Auto Complete Quests",
-        Default = false,
+        Title = "Enable Auto Complete Quests", Default = false,
         Callback = function(v)
             taskAutomationEnabled = v
             getgenv().autoPressE = v
@@ -389,13 +365,10 @@ do
         end
     })
     MainTab:AddSlider("TweenSpeed", { Title = "Character Tween Speed", Min = 16, Max = 150, Default = 30, Rounding = 0 })
-
     QuestTab:AddParagraph({ Title = "Enable quest categories to complete:" })
     for _, q in ipairs(quests) do
-        local toggle = QuestTab:AddToggle("Quest_" .. q.ID, { Title = q.DisplayName, Default = false })
-        questToggles[q.ID] = toggle
+        questToggles[q.ID] = QuestTab:AddToggle("Quest_" .. q.ID, { Title = q.DisplayName, Default = false })
     end
-
     EggSettingsTab:AddParagraph({ Title = "Preferred Egg for each quest type:" })
     for _, q in ipairs(quests) do
         EggSettingsTab:AddDropdown("EggFor_" .. q.ID, { Title = q.DisplayName, Values = eggNames, Default = q.DefaultEgg })
@@ -404,10 +377,10 @@ end
 
 --// Finalize UI //--
 Window:SelectTab(1)
-SaveManager:Load() -- Load saved settings for all tabs
+SaveManager:Load()
 
 Fluent:Notify({
-    Title = "Script Loaded",
-    Content = "Successfully merged Enchant Reroller & Quest Helper.",
+    Title = "Script Updated",
+    Content = "Reroller now uses Workspace pets & bug is fixed.",
     Duration = 8
 })
