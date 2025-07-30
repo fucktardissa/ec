@@ -1,4 +1,4 @@
---// Fluent + a Setup //--
+--// Fluent + SaveM2q3r52154125125q521anager Setup //--
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 
@@ -60,6 +60,7 @@ task.spawn(function()
 end)
 
 
+--// Enchant Reroller Tab -- (Final Fix) //--
 do
     -- State variables
     local rerolling = false
@@ -69,9 +70,9 @@ do
     -- UI Elements
     EnchantTab:AddParagraph({ Title = "Enchant Reroller", Content = "Automatically reroll enchants on selected pets until the desired one is obtained." })
     
-    -- THIS IS THE CORRECTED LINE: 'Addlabel' is now 'AddLabel'
-    local StatusLabel = EnchantTab:AddLabel("RerollStatus", { Text = "Status: Waiting..." })
-    StatusLabel.Content.TextWrapped = true
+    -- Changed AddLabel to AddParagraph and adjusted update logic
+    local StatusParagraph = EnchantTab:AddParagraph({ Title = "Status", Content = "Waiting..." })
+    local StatusContent = StatusParagraph.Content -- Get the TextLabel object for the content
 
     local IndividualPetSection = EnchantTab:AddSection("Select Individual Pets")
     local updateIndividualPetList -- Forward declaration
@@ -115,7 +116,7 @@ do
             PetNameDropdown:SetValues(petNamesList)
         end)
         if not success then
-            StatusLabel:SetText("Error finding pets: " .. tostring(err))
+            StatusContent.Text = "Error finding pets: " .. tostring(err)
         end
     end
     
@@ -134,7 +135,7 @@ do
         table.sort(petsToShow, function(a, b) return a.Id < b.Id end)
 
         for _, petData in ipairs(petsToShow) do
-            local toggleTitle = string.format("%s [ID: %s]", petData.Name, petData.Id:sub(1, 8)) -- Show first part of ID
+            local toggleTitle = string.format("%s [ID: %s]", petData.Name, petData.Id:sub(1, 8))
 
             IndividualPetSection:AddToggle("PetToggle_" .. petData.Id, {
                 Title = toggleTitle,
@@ -149,10 +150,10 @@ do
     EnchantTab:AddButton({
         Title = "Refresh Pet List",
         Callback = function()
-            StatusLabel:SetText("Refreshing pet list from workspace...")
+            StatusContent.Text = "Refreshing pet list from workspace..."
             populatePetLists()
             updateIndividualPetList(Options.PetNameSelector.Value)
-            StatusLabel:SetText("Status: Waiting...")
+            StatusContent.Text = "Status: Waiting..."
         end
     })
 
@@ -188,16 +189,16 @@ do
         Callback = function()
             if rerolling then return end
             local targetEnchant, targetLevel = Options.EnchantName.Value, tonumber(Options.EnchantLevel.Value)
-            if not next(selectedPetIds) then StatusLabel:SetText("⚠️ Select at least one pet."); return end
-            if not targetEnchant or targetEnchant == "" or not targetLevel then StatusLabel:SetText("⚠️ Enter a valid enchant name and level."); return end
+            if not next(selectedPetIds) then StatusContent.Text = "⚠️ Select at least one pet."; return end
+            if not targetEnchant or targetEnchant == "" or not targetLevel then StatusContent.Text = "⚠️ Enter a valid enchant name and level."; return end
 
             rerolling = true
-            StatusLabel:SetText("⏳ Starting reroll...")
+            StatusContent.Text = "⏳ Starting reroll..."
 
             coroutine.wrap(function()
                 while rerolling do
                     local rerollQueue = {}
-                    local playerData = LocalData:Get() -- Still need LocalData to check enchants
+                    local playerData = LocalData:Get()
                     
                     for petId in pairs(selectedPetIds) do
                         local currentPet
@@ -210,7 +211,7 @@ do
                     end
                     
                     if #rerollQueue == 0 then
-                        StatusLabel:SetText("✅ All selected pets have the desired enchant. Monitoring...")
+                        StatusContent.Text = "✅ All selected pets have the desired enchant. Monitoring..."
                         task.wait(2); continue
                     end
 
@@ -222,14 +223,14 @@ do
                         end
                         if currentPet and not hasDesiredEnchant(currentPet, targetEnchant, targetLevel) then
                             local petDisplayName = currentPet.Name or currentPet.name or currentPet._name or petIdToReroll
-                            StatusLabel:SetText("🔁 Rerolling " .. petDisplayName)
+                            StatusContent.Text = "🔁 Rerolling " .. petDisplayName
                             EnchantRerollFunction:InvokeServer("RerollEnchants", petIdToReroll, "Gems")
                             task.wait(0.3)
                         end
                     end
                     task.wait(0.5)
                 end
-                StatusLabel:SetText("⏹️ Reroll stopped.")
+                StatusContent.Text = "⏹️ Reroll stopped."
             end)()
         end
     })
@@ -239,7 +240,7 @@ do
         Callback = function()
             if rerolling then
                 rerolling = false
-                StatusLabel:SetText("⏹️ Stopping... Reroll will stop after the current action.")
+                StatusContent.Text = "⏹️ Stopping... Reroll will stop after the current action."
             end
         end
     })
@@ -380,6 +381,6 @@ SaveManager:Load()
 
 Fluent:Notify({
     Title = "Script Updated",
-    Content = "Typo 'Addlabel' has been corrected to 'AddLabel'.",
+    Content = "Replaced 'AddLabel' with 'AddParagraph' to fix error.",
     Duration = 8
 })
