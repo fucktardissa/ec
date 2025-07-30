@@ -1,4 +1,4 @@
--- ================== PART 1: LOADbvasdhjsauoid hjsaouid jhasdoiujdsa oiasj doi FALIBRARIES (Safely) ==================
+-- ================== PART 1: LOAD LIBRARIES (DIIIVVEE INN ) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -119,9 +119,7 @@ RerollToggle:OnChanged(function(value)
         return
     end
 
-    -- The entire reroll process is now wrapped in a background task
     task.spawn(function()
-        -- 1. Get targets from UI
         local selectedPetNames = Options.EquippedPetDropdown.Value
         local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
         local targetPetIds, targetEnchants = {}, {}
@@ -140,7 +138,6 @@ RerollToggle:OnChanged(function(value)
             return
         end
 
-        -- 2. New Reroll Logic: Process one pet at a time
         for i, petId in ipairs(targetPetIds) do
             if not isRerolling then break end
             
@@ -149,42 +146,41 @@ RerollToggle:OnChanged(function(value)
             end)()
 
             Fluent:Notify({Title = "Now Rerolling", Content = "Focusing on: " .. (petInfo.name or "Unknown"), Duration = 3})
-
-            -- Inner loop: Reroll this single pet until it's done or user stops
-            local petIsDone = false
-            while not petIsDone and isRerolling do
+            
+            -- FIXED: This new loop structure prevents rerolling over a successful enchant.
+            while isRerolling do
+                -- 1. Always get the latest pet data first.
                 local currentPetData = (function()
-                    for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end
+                    for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end
                 end)()
-
-                if currentPetData then
-                    local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
-                    if foundEnchantName then
-                        -- Success! Pet is done.
-                        Fluent:Notify({Title = "Success!", Content = (petInfo.name or "Unknown") .. " got " .. foundEnchantName, Duration = 4})
-                        petIsDone = true -- Break the inner while loop
-                    else
-                        -- Not done, reroll it
-                        RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
-                        task.wait(Options.RerollSpeedSlider.Value)
-                    end
-                else
-                    -- Pet not found, something is wrong
-                    Fluent:Notify({Title = "Error", Content = "Could not find pet with ID: "..petId, Duration = 5})
-                    petIsDone = true -- Stop trying for this pet
+                
+                if not currentPetData then
+                     Fluent:Notify({Title = "Error", Content = "Could not find pet with ID: "..petId, Duration = 5})
+                     break -- Stop trying for this pet
                 end
+
+                -- 2. Check if the pet already has a desired enchant.
+                local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
+                
+                -- 3. If it does, notify success and break the loop to move to the next pet.
+                if foundEnchantName then
+                    Fluent:Notify({Title = "Success!", Content = (petInfo.name or "Unknown") .. " got " .. foundEnchantName, Duration = 4})
+                    break -- This is the crucial change.
+                end
+
+                -- 4. If it does NOT have the enchant, perform the reroll action and wait.
+                RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
+                task.wait(Options.RerollSpeedSlider.Value)
             end
         end
 
-        -- 3. After the main loop finishes
         if isRerolling then
             Fluent:Notify({Title = "Complete!", Content = "All selected pets have been processed.", Duration = 5})
-            RerollToggle:SetValue(false) -- Auto-turn off the toggle
+            RerollToggle:SetValue(false)
         end
     end)
 end)
 
--- Background task to keep pet list updated
 task.spawn(function()
     while task.wait(2) do
         if Fluent.Unloaded then break end
