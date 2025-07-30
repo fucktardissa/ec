@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIasdasdasdasdasdasdES (Safely) ==================
+-- ================== PART 1: LOAD LIBRARIES & SERVICES (Sfffffffffffffffffffffffffffffffffffffffffffffffffffffafely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -8,16 +8,22 @@ if not success or not Fluent then
     return
 end
 
-local Players = game:GetService("Players")
+-- Game Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalData = require(ReplicatedStorage:WaitForChild("Client"):WaitForChild("Framework"):WaitForChild("Services"):WaitForChild("LocalData"))
-local RemoteFunction = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteFunction
+local ClientFramework = ReplicatedStorage:WaitForChild("Client"):WaitForChild("Framework")
+local SharedFramework = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework")
+
+-- Core Systems
+local LocalData = require(ClientFramework:WaitForChild("Services"):WaitForChild("LocalData"))
+-- This is the original remote that rerolls BOTH slots on a shiny pet
+local RerollBothRemote = SharedFramework.Network.Remote.RemoteFunction
+-- This is the new remote that targets a SPECIFIC enchant slot (1 or 2)
+local RerollSlotEvent = SharedFramework.Network.Remote.RemoteEvent
 
 -- ================== PART 2: DATA, CONFIG, & STATE ==================
 local isRerolling = false
 local Options = Fluent.Options
 
--- A comprehensive list of all possible enchants
 local AllEnchants = {
     "Bubbler I", "Bubbler II", "Bubbler III", "Bubbler IV", "Bubbler V", "Gleaming I", "Gleaming II", "Gleaming III",
     "Looter I", "Looter II", "Looter III", "Looter IV", "Looter V", "Team Up I", "Team Up II", "Team Up III", "Team Up IV", "Team Up V",
@@ -26,7 +32,6 @@ local AllEnchants = {
 local enchantLookup = {}
 
 -- ================== PART 3: HELPER FUNCTIONS & SETUP ==================
--- Parses an enchant's full name (e.g., "Looter V") into its ID ("looter") and level (5)
 local function parseEnchantName(name)
     local romanMap = { I = 1, II = 2, III = 3, IV = 4, V = 5 }
     local baseName, roman = name:match("^(.*) (%S+)$")
@@ -38,14 +43,12 @@ local function parseEnchantName(name)
     end
 end
 
--- Pre-populate the lookup table for quick access
 for _, fullName in ipairs(AllEnchants) do
     local parsed = parseEnchantName(fullName)
     if not enchantLookup[parsed.id] then enchantLookup[parsed.id] = {} end
     enchantLookup[parsed.id][parsed.level] = fullName
 end
 
--- Retrieves and formats the player's currently equipped pets for display
 local function getEquippedPetsData()
     local petsData = {}
     local playerData = LocalData:Get()
@@ -62,41 +65,40 @@ local function getEquippedPetsData()
         local petInfo = petDataMap[petId]
         if petInfo then
             local nameParts = {}
-            -- ⭐ Check for Shiny and Mythic status to build the name
             if petInfo.Shiny then table.insert(nameParts, "Shiny") end
             if petInfo.Mythic then table.insert(nameParts, "Mythic") end
-            
             table.insert(nameParts, petInfo.Name or "Unknown Pet")
             if petInfo.Enchants and next(petInfo.Enchants) then
                 local enchantNames = {}
-                for _, enchantData in pairs(petInfo.Enchants) do
+                for slot, enchantData in pairs(petInfo.Enchants) do
                     local fullName = enchantLookup[enchantData.Id] and enchantLookup[enchantData.Id][enchantData.Level]
                     table.insert(enchantNames, fullName or enchantData.Id)
                 end
                 table.insert(nameParts, "(" .. table.concat(enchantNames, ", ") .. ")")
             end
-            table.insert(petsData, { name = table.concat(nameParts, " "), id = petId })
+            table.insert(petsData, { name = table.concat(nameParts, " "), id = petId, shiny = petInfo.Shiny })
         end
     end
     return petsData
 end
 
--- Checks if a pet has any of the user-selected target enchants
-local function hasDesiredEnchant(petInfo, targetEnchants)
-    if not petInfo.Enchants then return nil end
-    for _, currentEnchant in pairs(petInfo.Enchants) do
+-- MODIFIED: Now returns the enchant name AND the slot it was found in.
+local function findDesiredEnchant(petData, targetEnchants)
+    if not petData or not petData.Enchants then return nil, nil end
+    for slot, currentEnchant in pairs(petData.Enchants) do
         for _, targetEnchant in ipairs(targetEnchants) do
             if currentEnchant.Id == targetEnchant.id and currentEnchant.Level == targetEnchant.level then
-                return enchantLookup[currentEnchant.Id][currentEnchant.Level] -- Return the full name of the found enchant
+                local fullName = enchantLookup[currentEnchant.Id][currentEnchant.Level]
+                return fullName, slot
             end
         end
     end
-    return nil -- No desired enchant was found
+    return nil, nil -- No desired enchant was found
 end
 
 -- ================== PART 4: BUILD THE FLUENT UI ==================
 local Window = Fluent:CreateWindow({
-    Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 400),
+    Title = "Pet Helper", SubTitle = "Dual Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 480),
     Acrylic = true, Theme = "Dark", MinimizeKey = Enum.KeyCode.LeftControl
 })
 
@@ -108,16 +110,21 @@ local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
     Values = (function() local n = {} for _,v in ipairs(getEquippedPetsData()) do table.insert(n, v.name) end return n end)(),
     Multi = true, Default = {}
 })
-local EnchantDropdown = Tabs.Main:AddDropdown("TargetEnchantsDropdown", {
-    Title = "Target Enchants", Description = "Will stop on any selected enchant.",
+local PrimaryEnchantDropdown = Tabs.Main:AddDropdown("PrimaryEnchantsDropdown", {
+    Title = "Primary Target Enchants", Description = "The first enchant to roll for.",
+    Values = AllEnchants, Multi = true, Default = {}
+})
+-- ⭐ NEW: Dropdown for the secondary enchant
+local SecondaryEnchantDropdown = Tabs.Main:AddDropdown("SecondaryEnchantsDropdown", {
+    Title = "Secondary Target Enchants (Shiny Only)", Description = "After getting the primary, will roll the other slot for these.",
     Values = AllEnchants, Multi = true, Default = {}
 })
 local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
-    Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts. Lower is faster.",
+    Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts.",
     Default = 0.4, Min = 0.1, Max = 2.0, Rounding = 1
 })
 
--- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
+-- ================== PART 5: CORE REROLL & REFRESH LOGIC (OVERHAULED) ==================
 local equippedPetsData = getEquippedPetsData()
 
 RerollToggle:OnChanged(function(value)
@@ -127,82 +134,91 @@ RerollToggle:OnChanged(function(value)
         return
     end
 
-    -- The entire reroll process is wrapped in a background task to prevent UI freezing
     task.spawn(function()
-        -- 1. Get targets from UI selections
+        -- 1. Get all targets from UI
         local selectedPetNames = Options.EquippedPetDropdown.Value
-        local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
-        local targetPetIds, targetEnchants = {}, {}
+        local primaryEnchantNames = Options.PrimaryEnchantsDropdown.Value
+        local secondaryEnchantNames = Options.SecondaryEnchantsDropdown.Value
 
+        local targetPets, primaryTargets, secondaryTargets = {}, {}, {}
+        
         for _, petData in ipairs(equippedPetsData) do
-            if selectedPetNames[petData.name] then table.insert(targetPetIds, petData.id) end
+            if selectedPetNames[petData.name] then table.insert(targetPets, petData) end
         end
-        for enchantName, isSelected in pairs(selectedEnchantNames) do
-            if isSelected then table.insert(targetEnchants, parseEnchantName(enchantName)) end
-        end
+        for name, selected in pairs(primaryEnchantNames) do if selected then table.insert(primaryTargets, parseEnchantName(name)) end end
+        for name, selected in pairs(secondaryEnchantNames) do if selected then table.insert(secondaryTargets, parseEnchantName(name)) end end
 
-        if #targetPetIds == 0 or #targetEnchants == 0 then
-            Fluent:Notify({ Title = "Error", Content = "Select at least one pet and one enchant.", Duration = 5 })
+        if #targetPets == 0 or #primaryTargets == 0 then
+            Fluent:Notify({ Title = "Error", Content = "Select at least one pet and one primary enchant.", Duration = 5 })
             RerollToggle:SetValue(false)
-            isRerolling = false
             return
         end
 
-        -- 2. New Reroll Logic: Process one pet at a time, sequentially.
-        for _, petId in ipairs(targetPetIds) do
-            if not isRerolling then break end -- Exit if user toggled off
-
-            local petInfo = (function() for _, p in ipairs(equippedPetsData) do if p.id == petId then return p end end end)()
-            if not petInfo then
-                warn("Could not find info for pet ID:", petId)
-                continue -- Skip to the next pet
-            end
+        -- 2. Process each selected pet one by one
+        for _, petInfo in ipairs(targetPets) do
+            if not isRerolling then break end
             
-            -- PRE-REROLL CHECK: See if the pet already has a valid enchant.
-            local initialPetData = (function() for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end end)()
-            if initialPetData then
-                local foundEnchantName = hasDesiredEnchant(initialPetData, targetEnchants)
-                if foundEnchantName then
-                    Fluent:Notify({ Title = "Skipped", Content = ("%s already has %s."):format(petInfo.name, foundEnchantName), Duration = 4 })
-                    continue -- This pet is valid, so skip to the next one.
+            local petId = petInfo.id
+            local petName = petInfo.name
+            local isShiny = petInfo.shiny
+            local primarySlot, secondarySlot = nil, nil
+
+            -- ================= PHASE 1: SECURE THE PRIMARY ENCHANT =================
+            Fluent:Notify({ Title = "Phase 1: Primary", Content = "Seeking primary enchant for: " .. petName, Duration = 3 })
+            local primaryDone = false
+            while not primaryDone and isRerolling do
+                local currentPetData = (function() for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end)()
+                local foundName, foundSlot = findDesiredEnchant(currentPetData, primaryTargets)
+                
+                if foundName then
+                    Fluent:Notify({ Title = "Primary Secured!", Content = ("%s has %s in slot %d."):format(petName, foundName, foundSlot), Duration = 4 })
+                    primarySlot = foundSlot
+                    primaryDone = true
+                else
+                    -- Reroll and wait
+                    RerollBothRemote:InvokeServer("RerollEnchants", petId, "Gems")
+                    task.wait(Options.RerollSpeedSlider.Value)
                 end
             end
-
-            -- If the check fails, the pet needs to be rerolled.
-            Fluent:Notify({ Title = "Now Rerolling", Content = "Focusing on: " .. petInfo.name, Duration = 3 })
             
-            local petIsDone = false
-            while not petIsDone and isRerolling do
-                -- Reroll the pet and wait for the specified delay
-                RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
-                task.wait(Options.RerollSpeedSlider.Value)
+            if not isRerolling then break end
 
-                -- Get the pet's updated data to check the new enchants
-                local currentPetData = (function() for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end end)()
-                if currentPetData then
-                    local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
-                    if foundEnchantName then
-                        -- ✅ Success! Pet got a desired enchant.
-                        Fluent:Notify({ Title = "Success!", Content = ("%s got %s!"):format(petInfo.name, foundEnchantName), Duration = 5 })
-                        petIsDone = true -- Break the inner loop and move to the next pet
+            -- ================= PHASE 2: SECURE THE SECONDARY ENCHANT (SHINY PETS ONLY) =================
+            if isShiny and #secondaryTargets > 0 and primarySlot then
+                secondarySlot = (primarySlot == 1) and 2 or 1 -- Determine the other slot
+                
+                Fluent:Notify({ Title = "Phase 2: Secondary", Content = ("Seeking secondary on slot %d for: %s"):format(secondarySlot, petName), Duration = 3 })
+                
+                local secondaryDone = false
+                while not secondaryDone and isRerolling do
+                    local currentPetData = (function() for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end)()
+                    -- Check ONLY the secondary slot for a secondary enchant
+                    local enchantInSecondarySlot = currentPetData and currentPetData.Enchants and currentPetData.Enchants[secondarySlot]
+                    if enchantInSecondarySlot then
+                        local foundName, _ = findDesiredEnchant({ Enchants = { [secondarySlot] = enchantInSecondarySlot } }, secondaryTargets)
+                        if foundName then
+                            Fluent:Notify({ Title = "Secondary Secured!", Content = ("%s got %s in slot %d!"):format(petName, foundName, secondarySlot), Duration = 5 })
+                            secondaryDone = true
+                        end
                     end
-                else
-                    -- ❌ Error state, can't find pet data.
-                    Fluent:Notify({ Title = "Error", Content = "Could not find pet data for " .. petInfo.name, Duration = 5 })
-                    petIsDone = true -- Stop trying for this pet
+
+                    if not secondaryDone then
+                        -- Reroll only the specific secondary slot
+                        RerollSlotEvent:FireServer("RerollEnchant", petId, secondarySlot)
+                        task.wait(Options.RerollSpeedSlider.Value)
+                    end
                 end
             end
         end
 
-        -- 3. After the main loop finishes or is stopped
         if isRerolling then
             Fluent:Notify({ Title = "Complete!", Content = "All selected pets have been processed.", Duration = 5 })
-            RerollToggle:SetValue(false) -- Auto-turn off the toggle
+            RerollToggle:SetValue(false)
         end
     end)
 end)
 
--- Background task to keep the pet dropdown list updated if you equip/unequip pets
+-- Background task to keep the pet dropdown list updated
 task.spawn(function()
     while task.wait(2) do
         if Fluent.Unloaded then break end
@@ -221,4 +237,4 @@ task.spawn(function()
 end)
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Fluent Loaded", Content = "Pet Helper is now active.", Duration = 5 })
+Fluent:Notify({ Title = "Fluent Loaded", Content = "Dual Enchant Reroller is active.", Duration = 5 })
