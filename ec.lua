@@ -1,31 +1,38 @@
--- ================== PART 1: LOAD LIBRARIES ==================
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+-- ================== PART 1: LOAD LIBRARIES (Safely) ==================
+local success, Fluent = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+end)
+
+if not success or not Fluent then
+    warn("Fluent library failed to load. The script cannot continue.")
+    -- You could add a fallback notification for the user here if you wanted.
+    return -- Stop the script if the library is missing
+end
+
+-- Now we can safely get the other services and modules
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- Get the LocalData module, waiting for it if necessary
 local LocalData = require(ReplicatedStorage:WaitForChild("Client"):WaitForChild("Framework"):WaitForChild("Services"):WaitForChild("LocalData"))
 
 
--- ================== PART 2: HELPER FUNCTION TO GET PETS ==================
--- This function reads the player data and returns a table of formatted pet names
+-- ================== PART 2: DATA-FETCHING FUNCTION ==================
+-- This function reads player data and returns a list of formatted pet names.
 local function getEquippedPetsList()
     local formattedPetNames = {}
     local playerData = LocalData:Get()
 
-    -- Ensure all required data exists before proceeding
+    -- More robust checks to prevent errors
     if not (playerData and playerData.TeamEquipped and playerData.Teams and playerData.Pets) then
-        return {"Error: Could not load player data."}
+        return {"Error: Could not read player data."}
     end
 
-    -- Find the active team and its list of pet IDs
-    [cite_start]local equippedTeamId = playerData.TeamEquipped -- e.g., 1 [cite: 129]
+    local equippedTeamId = playerData.TeamEquipped
     local teamInfo = playerData.Teams[equippedTeamId]
     if not (teamInfo and teamInfo.Pets) then
-        return {"Error: Could not find equipped team data."}
+        return {"Error: Could not find equipped team info."}
     end
 
-    -- Create a fast lookup map of all pets by their ID
+    -- Create a map for quick pet lookups
     local petDataMap = {}
     for _, petData in pairs(playerData.Pets) do
         if petData.Id then
@@ -33,77 +40,76 @@ local function getEquippedPetsList()
         end
     end
 
-    -- Loop through the equipped pet IDs and build the formatted names
+    -- Build the formatted names
     for _, petId in ipairs(teamInfo.Pets) do
         local petInfo = petDataMap[petId]
         if petInfo then
             local nameParts = {}
-
-            [cite_start]-- Add "Mythic" prefix if the pet has the Mythic property [cite: 56]
-            if petInfo.Mythic then
-                table.insert(nameParts, "Mythic")
-            end
-            
+            if petInfo.Mythic then table.insert(nameParts, "Mythic") end
             table.insert(nameParts, petInfo.Name or "Unknown Pet")
 
-            [cite_start]-- Add enchants if they exist [cite: 60, 62]
             if petInfo.Enchants and next(petInfo.Enchants) then
                 local enchantNames = {}
                 for _, enchantData in pairs(petInfo.Enchants) do
-                    table.insert(enchantNames, enchantData.Id) -- e.g., "looter"
+                    table.insert(enchantNames, enchantData.Id)
                 end
                 table.insert(nameParts, "(" .. table.concat(enchantNames, ", ") .. ")")
             end
-
             table.insert(formattedPetNames, table.concat(nameParts, " "))
         else
             table.insert(formattedPetNames, "Unknown Pet (ID: "..tostring(petId)..")")
         end
     end
 
-    if #formattedPetNames == 0 then
-        return {"No pets equipped"}
-    end
-    
+    if #formattedPetNames == 0 then return {"No pets equipped"} end
     return formattedPetNames
 end
 
 
 -- ================== PART 3: BUILD THE FLUENT UI ==================
--- Create the main window
+-- Use the structure from the example
 local Window = Fluent:CreateWindow({
     Title = "Pet Helper",
-    SubTitle = "by you!",
+    SubTitle = "Equipped Team Viewer",
     TabWidth = 160,
-    Size = UDim2.fromOffset(480, 320),
+    Size = UDim2.fromOffset(520, 380),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Add a tab for our main functions
-local MainTab = Window:AddTab({ Title = "Team", Icon = "rbxassetid://72488281780856" })
+local Tabs = {
+    Main = Window:AddTab({ Title = "Team", Icon = "swords" }) -- Using a Lucide icon
+}
 
--- Add the dropdown, populated by our helper function
-local PetDropdown = MainTab:AddDropdown("EquippedPetDropdown", {
-    Title = "Equipped Pets",
-    List = getEquippedPetsList(), -- Get the initial list of pets
+-- Add the dropdown, using the 'Values' key as seen in the example
+local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
+    Title = "Currently Equipped Pets",
+    Description = "Shows pets from your active team.",
+    Values = getEquippedPetsList(), -- Use 'Values' instead of 'List'
     Multi = false,
     Default = 1,
 })
 
--- Add a button to refresh the list
-MainTab:AddButton({
-    Title = "Refresh List",
-    Description = "Update the dropdown if you change your team.",
+-- Add a refresh button, following the example's structure
+Tabs.Main:AddButton({
+    Title = "Refresh Pet List",
+    Description = "Click this if you change your equipped team or pet enchants.",
     Callback = function()
-        -- When clicked, get the new list and update the dropdown options
         local newList = getEquippedPetsList()
-        PetDropdown:SetOptions(newList)
+        PetDropdown:SetValues(newList) -- Use SetValues to update the dropdown
         Fluent:Notify({
-            Title = "Refreshed",
-            Content = "Pet list has been updated.",
-            Duration = 3
+            Title = "List Updated",
+            Content = "The equipped pets dropdown has been refreshed.",
+            Duration = 4
         })
     end
+})
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "Fluent Loaded",
+    Content = "Pet Helper script is now active.",
+    Duration = 5
 })
