@@ -1,4 +1,4 @@
--- ================== PAsick so sick you're my medicine
+-- ================== PART 1: LOAD LIBRARIES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -115,10 +115,20 @@ local RerollToggle = Tabs.Main:AddToggle("RerollToggle", {
 })
 
 Tabs.Main:AddParagraph({Title = "Status Log"})
-local StatusParagraph = Tabs.Main:AddParagraph({
-    Title = "",
-    Content = "Waiting to start..."
-})
+local StatusParagraph -- Declare the variable here
+
+-- FIXED: This function now destroys the old paragraph and creates a new one to update the text.
+local function updateStatus(newContent)
+    if StatusParagraph then
+        StatusParagraph:Destroy()
+    end
+    StatusParagraph = Tabs.Main:AddParagraph({
+        Title = "",
+        Content = newContent
+    })
+end
+
+updateStatus("Waiting to start...") -- Set the initial status
 
 -- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
 local equippedPetsData = getEquippedPetsData()
@@ -127,33 +137,27 @@ local completedPets = {}
 RerollToggle:OnChanged(function(value)
     isRerolling = value
     if not isRerolling then
-        StatusParagraph:SetValue("⏹️ Stopped by user.") -- FIXED: Use :SetValue
+        updateStatus("⏹️ Stopped by user.")
         return
     end
 
     task.spawn(function()
-        StatusParagraph:SetValue("⏳ Starting...") -- FIXED: Use :SetValue
+        updateStatus("⏳ Starting...")
         completedPets = {}
 
         local selectedPetNames = Options.EquippedPetDropdown.Value
         local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
+        local targetPetIds, targetEnchants = {}, {}
 
-        local targetPetIds = {}
         for _, petData in ipairs(equippedPetsData) do
-            if selectedPetNames[petData.name] then
-                table.insert(targetPetIds, petData.id)
-            end
+            if selectedPetNames[petData.name] then table.insert(targetPetIds, petData.id) end
         end
-
-        local targetEnchants = {}
         for enchantName, isSelected in pairs(selectedEnchantNames) do
-            if isSelected then
-                table.insert(targetEnchants, parseEnchantName(enchantName))
-            end
+            if isSelected then table.insert(targetEnchants, parseEnchantName(enchantName)) end
         end
 
         if #targetPetIds == 0 or #targetEnchants == 0 then
-            StatusParagraph:SetValue("⚠️ Error: Select at least one pet and one enchant.") -- FIXED: Use :SetValue
+            updateStatus("⚠️ Error: Select at least one pet and one enchant.")
             RerollToggle:SetValue(false)
             isRerolling = false
             return
@@ -166,18 +170,17 @@ RerollToggle:OnChanged(function(value)
 
             for _, petId in ipairs(targetPetIds) do
                 if not isRerolling then break end
-
                 local petInfo = petDataMap[petId]
                 if petInfo then
                     local foundEnchantName = hasDesiredEnchant(petInfo, targetEnchants)
                     if foundEnchantName then
                         if not completedPets[petId] then
-                            StatusParagraph:SetValue("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName) -- FIXED: Use :SetValue
+                            updateStatus("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName)
                             completedPets[petId] = true
                             task.wait(0.5)
                         end
                     else
-                        StatusParagraph:SetValue("🔁 Rerolling: " .. (petInfo.Name or petId)) -- FIXED: Use :SetValue
+                        updateStatus("🔁 Rerolling: " .. (petInfo.Name or petId))
                         RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
                         completedPets[petId] = nil
                         task.wait(Options.RerollSpeedSlider.Value)
