@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Saasfasfadsgef edagaeg eg faea fg ewtega aeg wf ea fely) ==================
+-- ================== PAsick so sick you're my medicine
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -115,9 +115,8 @@ local RerollToggle = Tabs.Main:AddToggle("RerollToggle", {
 })
 
 Tabs.Main:AddParagraph({Title = "Status Log"})
--- FIXED: Added an empty Title property to prevent the error
 local StatusParagraph = Tabs.Main:AddParagraph({
-    Title = "", 
+    Title = "",
     Content = "Waiting to start..."
 })
 
@@ -128,12 +127,12 @@ local completedPets = {}
 RerollToggle:OnChanged(function(value)
     isRerolling = value
     if not isRerolling then
-        StatusParagraph:SetContent("⏹️ Stopped by user.")
+        StatusParagraph:SetValue("⏹️ Stopped by user.") -- FIXED: Use :SetValue
         return
     end
 
     task.spawn(function()
-        StatusParagraph:SetContent("⏳ Starting...")
+        StatusParagraph:SetValue("⏳ Starting...") -- FIXED: Use :SetValue
         completedPets = {}
 
         local selectedPetNames = Options.EquippedPetDropdown.Value
@@ -154,7 +153,7 @@ RerollToggle:OnChanged(function(value)
         end
 
         if #targetPetIds == 0 or #targetEnchants == 0 then
-            StatusParagraph:SetContent("⚠️ Error: Select at least one pet and one enchant.")
+            StatusParagraph:SetValue("⚠️ Error: Select at least one pet and one enchant.") -- FIXED: Use :SetValue
             RerollToggle:SetValue(false)
             isRerolling = false
             return
@@ -173,12 +172,12 @@ RerollToggle:OnChanged(function(value)
                     local foundEnchantName = hasDesiredEnchant(petInfo, targetEnchants)
                     if foundEnchantName then
                         if not completedPets[petId] then
-                            StatusParagraph:SetContent("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName)
+                            StatusParagraph:SetValue("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName) -- FIXED: Use :SetValue
                             completedPets[petId] = true
                             task.wait(0.5)
                         end
                     else
-                        StatusParagraph:SetContent("🔁 Rerolling: " .. (petInfo.Name or petId))
+                        StatusParagraph:SetValue("🔁 Rerolling: " .. (petInfo.Name or petId)) -- FIXED: Use :SetValue
                         RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
                         completedPets[petId] = nil
                         task.wait(Options.RerollSpeedSlider.Value)
