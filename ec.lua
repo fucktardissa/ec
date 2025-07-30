@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Safely) ==================
+-- ================== PART 1: LOABombshellD LIBRARIES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -88,51 +88,51 @@ end
 
 -- ================== PART 4: BUILD THE FLUENT UI ==================
 local Window = Fluent:CreateWindow({
-    Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 600),
+    Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 620),
     Acrylic = true, Theme = "Dark", MinimizeKey = Enum.KeyCode.LeftControl
 })
 
 local Tabs = { Main = Window:AddTab({ Title = "Reroller", Icon = "swords" }) }
 
-Tabs.Main:AddParagraph({Title = "Setup"})
+-- UI elements are now reorganized
+local RerollToggle = Tabs.Main:AddToggle("RerollToggle", {
+    Title = "Start / Stop Rerolling", Default = false
+})
+
 local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
     Title = "Pets to Reroll", Description = "Select which equipped pets to include.",
     Values = (function() local n = {} for _,v in ipairs(getEquippedPetsData()) do table.insert(n, v.name) end return n end)(),
     Multi = true, Default = {}
 })
+
 local EnchantDropdown = Tabs.Main:AddDropdown("TargetEnchantsDropdown", {
     Title = "Target Enchants", Description = "Will stop on any selected enchant.",
     Values = AllEnchants, Multi = true, Default = {}
 })
 
-Tabs.Main:AddParagraph({Title = "Controls"})
 local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
     Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts. Lower is faster.",
     Default = 0.4, Min = 0.1, Max = 2.0, Rounding = 1
 })
-local RerollToggle = Tabs.Main:AddToggle("RerollToggle", {
-    Title = "Start / Stop Rerolling", Default = false
-})
 
-Tabs.Main:AddParagraph({Title = "Status Log"})
-local StatusParagraph -- Declare the variable here
+local StatusParagraph, CompletedPetsParagraph
 
--- FIXED: This function now destroys the old paragraph and creates a new one to update the text.
 local function updateStatus(newContent)
-    if StatusParagraph then
-        StatusParagraph:Destroy()
-    end
-    StatusParagraph = Tabs.Main:AddParagraph({
-        Title = "",
-        Content = newContent
-    })
+    if StatusParagraph then StatusParagraph:Destroy() end
+    StatusParagraph = Tabs.Main:AddParagraph({ Title = "Action Log", Content = newContent })
 end
 
-updateStatus("Waiting to start...") -- Set the initial status
+local function updateCompletedStatus(completedList)
+    if CompletedPetsParagraph then CompletedPetsParagraph:Destroy() end
+    CompletedPetsParagraph = Tabs.Main:AddParagraph({ Title = "Completed Pets", Content = table.concat(completedList, "\n") })
+end
+
+updateStatus("Waiting to start...")
+updateCompletedStatus({"None"})
 
 -- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
 local equippedPetsData = getEquippedPetsData()
-local completedPets = {}
+local completedPets = {} -- Using pet IDs as keys
 
 RerollToggle:OnChanged(function(value)
     isRerolling = value
@@ -143,7 +143,8 @@ RerollToggle:OnChanged(function(value)
 
     task.spawn(function()
         updateStatus("⏳ Starting...")
-        completedPets = {}
+        completedPets = {} -- Reset the list of completed pets
+        updateCompletedStatus({"None"})
 
         local selectedPetNames = Options.EquippedPetDropdown.Value
         local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
@@ -167,6 +168,8 @@ RerollToggle:OnChanged(function(value)
             local playerData = LocalData:Get()
             local petDataMap = {}
             for _, petData in pairs(playerData.Pets) do petDataMap[petData.Id] = petData end
+            
+            local completedCount = 0
 
             for _, petId in ipairs(targetPetIds) do
                 if not isRerolling then break end
@@ -174,19 +177,37 @@ RerollToggle:OnChanged(function(value)
                 if petInfo then
                     local foundEnchantName = hasDesiredEnchant(petInfo, targetEnchants)
                     if foundEnchantName then
+                        completedCount = completedCount + 1
                         if not completedPets[petId] then
                             updateStatus("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName)
-                            completedPets[petId] = true
+                            completedPets[petId] = petInfo.Name or petId
+                            
+                            local completedNames = {}
+                            for _, name in pairs(completedPets) do table.insert(completedNames, name) end
+                            updateCompletedStatus(completedNames)
                             task.wait(0.5)
                         end
                     else
                         updateStatus("🔁 Rerolling: " .. (petInfo.Name or petId))
                         RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
-                        completedPets[petId] = nil
+                        if completedPets[petId] then
+                           completedPets[petId] = nil
+                           local completedNames = {}
+                           for _, name in pairs(completedPets) do table.insert(completedNames, name) end
+                           updateCompletedStatus(completedNames)
+                        end
                         task.wait(Options.RerollSpeedSlider.Value)
                     end
                 end
             end
+            
+            -- Check if all selected pets are completed
+            if #targetPetIds > 0 and completedCount == #targetPetIds then
+                updateStatus("🎉 All selected pets have a target enchant!")
+                RerollToggle:SetValue(false) -- Auto-turn off the toggle
+                isRerolling = false
+            end
+            
             task.wait(0.1)
         end
     end)
