@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Safely) ==================
+-- ================== PART 1: LOAD LIBRAssasdasdRIES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -119,9 +119,7 @@ RerollToggle:OnChanged(function(value)
         return
     end
 
-    -- The entire reroll process is now wrapped in a background task
     task.spawn(function()
-        -- 1. Get targets from UI
         local selectedPetNames = Options.EquippedPetDropdown.Value
         local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
         local targetPetIds, targetEnchants = {}, {}
@@ -140,46 +138,42 @@ RerollToggle:OnChanged(function(value)
             return
         end
 
-        -- 2. New Reroll Logic: Process one pet at a time
         for i, petId in ipairs(targetPetIds) do
             if not isRerolling then break end
             
             local petInfo = (function()
-                for _, p in pairs(equippedPetsData) do if p.id == petId then return p end end
+                for _, p in pairs(equippedPetsData) do if p.id == petId then return p end
             end)()
 
             Fluent:Notify({Title = "Now Rerolling", Content = "Focusing on: " .. (petInfo.name or "Unknown"), Duration = 3})
-
-            -- Inner loop: Reroll this single pet until it's done or user stops
-            local petIsDone = false
-            while not petIsDone and isRerolling do
+            
+            -- This improved loop checks first, then acts, preventing the "extra reroll" bug.
+            while isRerolling do
                 local currentPetData = (function()
-                    for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end
+                    for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end
                 end)()
-
-                if currentPetData then
-                    local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
-                    if foundEnchantName then
-                        -- Success! Pet is done.
-                        Fluent:Notify({Title = "Success!", Content = (petInfo.name or "Unknown") .. " got " .. foundEnchantName, Duration = 4})
-                        petIsDone = true -- Break the inner while loop
-                    else
-                        -- Not done, reroll it
-                        RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
-                        task.wait(Options.RerollSpeedSlider.Value)
-                    end
-                else
-                    -- Pet not found, something is wrong
-                    Fluent:Notify({Title = "Error", Content = "Could not find pet with ID: "..petId, Duration = 5})
-                    petIsDone = true -- Stop trying for this pet
+                
+                if not currentPetData then
+                     Fluent:Notify({Title = "Error", Content = "Could not find pet with ID: "..petId, Duration = 5})
+                     break
                 end
+
+                local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
+                
+                if foundEnchantName then
+                    Fluent:Notify({Title = "Success!", Content = (petInfo.name or "Unknown") .. " got " .. foundEnchantName, Duration = 4})
+                    break -- The loop stops IMMEDIATELY, preventing an extra reroll.
+                end
+
+                -- Only if the check above fails do we reroll.
+                RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
+                task.wait(Options.RerollSpeedSlider.Value)
             end
         end
 
-        -- 3. After the main loop finishes
         if isRerolling then
             Fluent:Notify({Title = "Complete!", Content = "All selected pets have been processed.", Duration = 5})
-            RerollToggle:SetValue(false) -- Auto-turn off the toggle
+            RerollToggle:SetValue(false)
         end
     end)
 end)
