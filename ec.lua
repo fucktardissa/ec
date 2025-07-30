@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (DIIIVVEE INN ) ==================
+-- ================== PART 1: LOAD LIBRARIES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -147,28 +147,23 @@ RerollToggle:OnChanged(function(value)
 
             Fluent:Notify({Title = "Now Rerolling", Content = "Focusing on: " .. (petInfo.name or "Unknown"), Duration = 3})
             
-            -- FIXED: This new loop structure prevents rerolling over a successful enchant.
             while isRerolling do
-                -- 1. Always get the latest pet data first.
                 local currentPetData = (function()
                     for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end
                 end)()
                 
                 if not currentPetData then
                      Fluent:Notify({Title = "Error", Content = "Could not find pet with ID: "..petId, Duration = 5})
-                     break -- Stop trying for this pet
+                     break
                 end
 
-                -- 2. Check if the pet already has a desired enchant.
                 local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
                 
-                -- 3. If it does, notify success and break the loop to move to the next pet.
                 if foundEnchantName then
                     Fluent:Notify({Title = "Success!", Content = (petInfo.name or "Unknown") .. " got " .. foundEnchantName, Duration = 4})
-                    break -- This is the crucial change.
+                    break
                 end
 
-                -- 4. If it does NOT have the enchant, perform the reroll action and wait.
                 RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
                 task.wait(Options.RerollSpeedSlider.Value)
             end
