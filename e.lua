@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRAR
+-- =================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -131,7 +131,7 @@ local SecondaryEnchantDropdown = Tabs.Main:AddDropdown("SecondaryEnchantDropdown
     Title = "Secondary Target Enchants", Description = "After finding a primary, will reroll the OTHER slot for one of these.",
     Values = AllEnchants, Multi = true, Default = {}
 })
-Tabs.Main:AddLabel("InfoLabel", {Title = "Secondary rerolling only works on Shiny pets."}):SetColor(Color3.fromRGB(255, 200, 0))
+--Tabs.Main:AddLabel("InfoLabel", {Title = "Secondary rerolling only works on Shiny pets."}):SetColor(Color3.fromRGB(255, 200, 0))
 
 local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
     Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts.",
