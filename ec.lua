@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Safelwhat - a vibe kill (kill) you didnt even try y) ==================
+-- ================== PART 1: LOAD LIBRARIES (Saasfasfadsgef edagaeg eg faea fg ewtega aeg wf ea fely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -22,7 +22,7 @@ local AllEnchants = {
     "Looter I", "Looter II", "Looter III", "Looter IV", "Looter V", "Team Up I", "Team Up II", "Team Up III", "Team Up IV", "Team Up V",
     "High Roller", "Infinity", "Magnetism", "Secret Hunter", "Ultra Roller", "Determination", "Shiny Seeker"
 }
-local enchantLookup = {} -- This will be populated below
+local enchantLookup = {}
 
 -- ================== PART 3: HELPER FUNCTIONS & SETUP ==================
 local function parseEnchantName(name)
@@ -32,12 +32,10 @@ local function parseEnchantName(name)
     if baseName and level then
         return { id = baseName:lower():gsub(" ", "-"), level = level }
     else
-        -- For enchants without a level (e.g., "Infinity")
         return { id = name:lower():gsub(" ", "-"), level = 1 }
     end
 end
 
--- Pre-populate the enchant lookup table for easy name formatting
 for _, fullName in ipairs(AllEnchants) do
     local parsed = parseEnchantName(fullName)
     if not enchantLookup[parsed.id] then enchantLookup[parsed.id] = {} end
@@ -81,11 +79,11 @@ local function hasDesiredEnchant(petInfo, targetEnchants)
     for _, currentEnchant in pairs(petInfo.Enchants) do
         for _, targetEnchant in ipairs(targetEnchants) do
             if currentEnchant.Id == targetEnchant.id and currentEnchant.Level == targetEnchant.level then
-                return enchantLookup[currentEnchant.Id][currentEnchant.Level] -- Return the full name of the found enchant
+                return enchantLookup[currentEnchant.Id][currentEnchant.Level]
             end
         end
     end
-    return nil -- No match found
+    return nil
 end
 
 -- ================== PART 4: BUILD THE FLUENT UI ==================
@@ -117,7 +115,9 @@ local RerollToggle = Tabs.Main:AddToggle("RerollToggle", {
 })
 
 Tabs.Main:AddParagraph({Title = "Status Log"})
+-- FIXED: Added an empty Title property to prevent the error
 local StatusParagraph = Tabs.Main:AddParagraph({
+    Title = "", 
     Content = "Waiting to start..."
 })
 
@@ -134,7 +134,7 @@ RerollToggle:OnChanged(function(value)
 
     task.spawn(function()
         StatusParagraph:SetContent("⏳ Starting...")
-        completedPets = {} -- Reset the list of completed pets
+        completedPets = {}
 
         local selectedPetNames = Options.EquippedPetDropdown.Value
         local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
@@ -173,21 +173,19 @@ RerollToggle:OnChanged(function(value)
                     local foundEnchantName = hasDesiredEnchant(petInfo, targetEnchants)
                     if foundEnchantName then
                         if not completedPets[petId] then
-                            -- New completion! Update status and mark as completed.
                             StatusParagraph:SetContent("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName)
                             completedPets[petId] = true
-                            task.wait(0.5) -- Pause briefly to show the success message
+                            task.wait(0.5)
                         end
                     else
-                        -- Needs a reroll
                         StatusParagraph:SetContent("🔁 Rerolling: " .. (petInfo.Name or petId))
                         RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
-                        completedPets[petId] = nil -- No longer complete
-                        task.wait(Options.RerollSpeedSlider.Value) -- Use the slider value for the delay
+                        completedPets[petId] = nil
+                        task.wait(Options.RerollSpeedSlider.Value)
                     end
                 end
             end
-            task.wait(0.1) -- Brief pause after checking all pets
+            task.wait(0.1)
         end
     end)
 end)
