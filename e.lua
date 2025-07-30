@@ -1,4 +1,4 @@
--- =================
+-- =================fix
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -92,19 +92,35 @@ local function getEquippedPetsForDisplay()
     return petsForDisplay
 end
 
--- ⭐ NEW: Checks if a pet has a desired enchant and returns its name and SLOT (1 or 2).
-local function findEnchantSlot(petInfo, targetEnchants)
+-- ⭐ NEW: Can now check a 'specificSlot' if provided, making it more reliable.
+local function findEnchantSlot(petInfo, targetEnchants, specificSlot)
     if not petInfo or not petInfo.Enchants then return nil, nil end
-    
-    for slotKey, currentEnchant in pairs(petInfo.Enchants) do
-        for _, targetEnchant in ipairs(targetEnchants) do
-            if currentEnchant.Id == targetEnchant.id and currentEnchant.Level == targetEnchant.level then
-                local fullName = enchantLookup[currentEnchant.Id][currentEnchant.Level]
-                return fullName, tonumber(slotKey) -- Return the name and the slot number
+
+    if specificSlot then
+        -- If a specific slot is requested, only check that one.
+        local slotKey = tostring(specificSlot)
+        local currentEnchant = petInfo.Enchants[slotKey]
+        if currentEnchant then
+            for _, targetEnchant in ipairs(targetEnchants) do
+                if currentEnchant.Id == targetEnchant.id and currentEnchant.Level == targetEnchant.level then
+                    local fullName = enchantLookup[currentEnchant.Id][currentEnchant.Level]
+                    return fullName, specificSlot -- Return the name and the requested slot number
+                end
+            end
+        end
+    else
+        -- If no specific slot, check all slots (original behavior for primary enchants).
+        for slotKey, currentEnchant in pairs(petInfo.Enchants) do
+            for _, targetEnchant in ipairs(targetEnchants) do
+                if currentEnchant.Id == targetEnchant.id and currentEnchant.Level == targetEnchant.level then
+                    local fullName = enchantLookup[currentEnchant.Id][currentEnchant.Level]
+                    return fullName, tonumber(slotKey)
+                end
             end
         end
     end
-    return nil, nil -- No desired enchant was found
+
+    return nil, nil -- Not found
 end
 
 -- ================== PART 4: BUILD THE FLUENT UI ==================
@@ -182,12 +198,13 @@ RerollToggle:OnChanged(function(value)
                     warn("Could not find data for pet ID:", petId); break
                 end
 
+                -- Check for primary enchant (checks all slots)
                 local primaryName, primarySlot = findEnchantSlot(currentPetData, primaryTargets)
 
                 if primaryName then
-                    -- ✅ PHASE 2: PRIMARY FOUND. Now work on the secondary.
+                    -- ✅ PHASE 2: PRIMARY FOUND.
                     if #secondaryTargets == 0 then
-                        Fluent:Notify({ Title = "Success!", Content = ("%s got primary enchant %s. No secondary selected."):format(petInfo.name, primaryName), Duration = 5 })
+                        Fluent:Notify({ Title = "Success!", Content = ("%s got primary enchant %s."):format(petInfo.name, primaryName), Duration = 5 })
                         petIsDone = true; continue
                     end
 
@@ -196,18 +213,19 @@ RerollToggle:OnChanged(function(value)
                         petIsDone = true; continue
                     end
                     
-                    local secondarySlotToReroll = (primarySlot == 1) and 2 or 1
-                    local otherSlotEnchant = currentPetData.Enchants[tostring(secondarySlotToReroll)]
+                    local secondarySlotToWorkOn = (primarySlot == 1) and 2 or 1
                     
-                    -- Check if the other slot already has the desired secondary enchant
-                    local secondaryName, _ = findEnchantSlot({ Enchants = { [secondarySlotToReroll] = otherSlotEnchant } }, secondaryTargets)
+                    -- ⭐ MODIFIED PART: Directly check the real pet data on the specific secondary slot.
+                    local secondaryName, _ = findEnchantSlot(currentPetData, secondaryTargets, secondarySlotToWorkOn)
+                    
                     if secondaryName then
+                        -- Success! Found the secondary enchant.
                         Fluent:Notify({ Title = "Success!", Content = ("%s now has %s & %s!"):format(petInfo.name, primaryName, secondaryName), Duration = 5 })
                         petIsDone = true; continue
+                    else
+                        -- Reroll the other slot because the check failed.
+                        RerollEvent:FireServer("RerollEnchant", currentPetData.Id, secondarySlotToWorkOn)
                     end
-
-                    -- Reroll the other slot
-                    RerollEvent:FireServer("RerollEnchant", currentPetData.Id, secondarySlotToReroll)
 
                 else
                     -- ❌ PHASE 1: PRIMARY NOT FOUND. Reroll both slots.
