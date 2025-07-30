@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Safely and 2) ==================
+-- ================== PART 1: LOAD L23232323IBRARIES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -13,9 +13,19 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalData = require(ReplicatedStorage:WaitForChild("Client"):WaitForChild("Framework"):WaitForChild("Services"):WaitForChild("LocalData"))
 
 
--- ================== PART 2: DATA-FETCHING FUNCTION ==================
+-- ================== PART 2: DATA & CONFIG ==================
+-- List of all possible enchants for the dropdown
+local AllEnchants = {
+    "Bubbler I", "Bubbler II", "Bubbler III", "Bubbler IV", "Bubbler V",
+    "Gleaming I", "Gleaming II", "Gleaming III",
+    "Looter I", "Looter II", "Looter III", "Looter IV", "Looter V",
+    "Team Up I", "Team Up II", "Team Up III", "Team Up IV", "Team Up V",
+    "High Roller", "Infinity", "Magnetism", "Secret Hunter", "Ultra Roller",
+    "Determination", "Shiny Seeker"
+}
+
+-- This function reads player data and returns a list of formatted pet names.
 local function getEquippedPetsList()
-    -- This function remains the same, it reads data and returns a list of pet names
     local formattedPetNames = {}
     local playerData = LocalData:Get()
 
@@ -64,32 +74,46 @@ end
 -- ================== PART 3: BUILD THE FLUENT UI ==================
 local Window = Fluent:CreateWindow({
     Title = "Pet Helper",
-    SubTitle = "Equipped Team Viewer",
+    SubTitle = "Enchant Reroller",
     TabWidth = 160,
-    Size = UDim2.fromOffset(520, 380),
+    Size = UDim2.fromOffset(540, 450),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
 local Tabs = {
-    Main = Window:AddTab({ Title = "Team", Icon = "swords" })
+    Main = Window:AddTab({ Title = "Reroller", Icon = "swords" })
 }
 
--- Get the initial list and store it. This is our starting point.
-local lastKnownPetList = getEquippedPetsList()
+-- Section for selecting pets
+Tabs.Main:AddParagraph({Title = "Pet Selection"})
 
 local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
-    Title = "Currently Equipped Pets",
-    Description = "Shows pets from your active team. Refreshes automatically.",
-    Values = lastKnownPetList,
-    Multi = false,
-    Default = 1,
+    Title = "Equipped Pets",
+    Description = "Select which equipped pets to reroll.",
+    Values = getEquippedPetsList(),
+    Multi = true, -- Changed to true to allow multiple selections
+    Default = {}, -- Changed to an empty table for multi-select
 })
+
+-- Section for selecting target enchants
+Tabs.Main:AddParagraph({Title = "Enchant Targeting"})
+
+local EnchantDropdown = Tabs.Main:AddDropdown("TargetEnchantsDropdown", {
+    Title = "Target Enchants",
+    Description = "Select one or more enchants to stop at.",
+    Values = AllEnchants,
+    Multi = true,
+    Default = {},
+})
+
+-- ================== PART 4: REFRESH LOGIC ==================
+local lastKnownPetList = getEquippedPetsList()
 
 Tabs.Main:AddButton({
     Title = "Refresh Pet List",
-    Description = "Manually updates the list. It also updates automatically.",
+    Description = "Manually updates the list of available pets.",
     Callback = function()
         lastKnownPetList = getEquippedPetsList()
         PetDropdown:SetValues(lastKnownPetList)
@@ -97,35 +121,19 @@ Tabs.Main:AddButton({
     end
 })
 
-
--- ================== PART 4: AUTOMATIC REFRESH LOOP ==================
 task.spawn(function()
-    while task.wait(2) do -- Check for changes every 2 seconds
-        if Fluent.Unloaded then break end -- Stop the loop if the UI is closed
+    while task.wait(2) do
+        if Fluent.Unloaded then break end
 
-        -- Get the current state of the equipped pets
         local currentPetList = getEquippedPetsList()
-
-        -- A simple way to check if the tables are different is to compare them as strings
         if table.concat(currentPetList, ",") ~= table.concat(lastKnownPetList, ",") then
-            -- If they are different, update the UI and our saved list
             PetDropdown:SetValues(currentPetList)
-            lastKnownPetList = currentPetList -- Update the last known state
-            
-            Fluent:Notify({
-                Title = "Team Updated",
-                Content = "Pet list refreshed automatically.",
-                Duration = 3
-            })
+            lastKnownPetList = currentPetList
+            Fluent:Notify({ Title = "Team Updated", Content = "Pet list refreshed automatically.", Duration = 3 })
         end
     end
 end)
 
 
 Window:SelectTab(1)
-
-Fluent:Notify({
-    Title = "Fluent Loaded",
-    Content = "Pet Helper is now active and will auto-refresh.",
-    Duration = 5
-})
+Fluent:Notify({ Title = "Fluent Loaded", Content = "Pet Helper is now active.", Duration = 5 })
