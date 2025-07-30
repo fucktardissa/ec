@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Safely) ==================
+-- ================== PART 1: LOAD LIBRARIasdasdasdasdasdasdES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -62,7 +62,10 @@ local function getEquippedPetsData()
         local petInfo = petDataMap[petId]
         if petInfo then
             local nameParts = {}
+            -- ⭐ Check for Shiny and Mythic status to build the name
+            if petInfo.Shiny then table.insert(nameParts, "Shiny") end
             if petInfo.Mythic then table.insert(nameParts, "Mythic") end
+            
             table.insert(nameParts, petInfo.Name or "Unknown Pet")
             if petInfo.Enchants and next(petInfo.Enchants) then
                 local enchantNames = {}
@@ -114,7 +117,7 @@ local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
     Default = 0.4, Min = 0.1, Max = 2.0, Rounding = 1
 })
 
--- ================== PART 5: CORE REROLL & REFRESH LOGIC (REVISED) ==================
+-- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
 local equippedPetsData = getEquippedPetsData()
 
 RerollToggle:OnChanged(function(value)
@@ -155,7 +158,7 @@ RerollToggle:OnChanged(function(value)
                 continue -- Skip to the next pet
             end
             
-            -- ⭐ PRE-REROLL CHECK: See if the pet already has a valid enchant.
+            -- PRE-REROLL CHECK: See if the pet already has a valid enchant.
             local initialPetData = (function() for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end end)()
             if initialPetData then
                 local foundEnchantName = hasDesiredEnchant(initialPetData, targetEnchants)
