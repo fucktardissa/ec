@@ -1,4 +1,4 @@
--- ================== PART 1: LOAD LIBRARIES (Safasfdsaasytgwaseyewqywer4y2w34yt234yt23ytely) ==================
+-- ================== PART 1: LOADbvasdhjsauoid hjsaouid jhasdoiujdsa oiasj doi FALIBRARIES (Safely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -88,7 +88,7 @@ end
 
 -- ================== PART 4: BUILD THE FLUENT UI ==================
 local Window = Fluent:CreateWindow({
-    Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 620),
+    Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 400),
     Acrylic = true, Theme = "Dark", MinimizeKey = Enum.KeyCode.LeftControl
 })
 
@@ -109,36 +109,19 @@ local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
     Default = 0.4, Min = 0.1, Max = 2.0, Rounding = 1
 })
 
-local StatusParagraph, CompletedPetsParagraph
-
-local function updateStatus(newContent)
-    if StatusParagraph then StatusParagraph:Destroy() end
-    StatusParagraph = Tabs.Main:AddParagraph({ Title = "Action Log", Content = newContent })
-end
-local function updateCompletedStatus(completedList)
-    if CompletedPetsParagraph then CompletedPetsParagraph:Destroy() end
-    CompletedPetsParagraph = Tabs.Main:AddParagraph({ Title = "Completed Pets", Content = table.concat(completedList, "\n") })
-end
-
-updateStatus("Waiting to start...")
-updateCompletedStatus({"None"})
-
 -- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
 local equippedPetsData = getEquippedPetsData()
-local completedPets = {}
 
 RerollToggle:OnChanged(function(value)
     isRerolling = value
     if not isRerolling then
-        updateStatus("⏹️ Stopped by user.")
+        Fluent:Notify({Title = "Stopped", Content = "Rerolling stopped by user.", Duration = 3})
         return
     end
 
+    -- The entire reroll process is now wrapped in a background task
     task.spawn(function()
-        updateStatus("⏳ Starting...")
-        completedPets = {}
-        updateCompletedStatus({"None"})
-
+        -- 1. Get targets from UI
         local selectedPetNames = Options.EquippedPetDropdown.Value
         local selectedEnchantNames = Options.TargetEnchantsDropdown.Value
         local targetPetIds, targetEnchants = {}, {}
@@ -151,63 +134,57 @@ RerollToggle:OnChanged(function(value)
         end
 
         if #targetPetIds == 0 or #targetEnchants == 0 then
-            updateStatus("⚠️ Error: Select at least one pet and one enchant.")
+            Fluent:Notify({Title = "Error", Content = "Select at least one pet and one enchant.", Duration = 5})
             RerollToggle:SetValue(false)
             isRerolling = false
             return
         end
 
-        while isRerolling do
-            local playerData = LocalData:Get()
-            local petDataMap = {}
-            for _, petData in pairs(playerData.Pets) do petDataMap[petData.Id] = petData end
+        -- 2. New Reroll Logic: Process one pet at a time
+        for i, petId in ipairs(targetPetIds) do
+            if not isRerolling then break end
             
-            local completedCount = 0
+            local petInfo = (function()
+                for _, p in pairs(equippedPetsData) do if p.id == petId then return p end end
+            end)()
 
-            for _, petId in ipairs(targetPetIds) do
-                if not isRerolling then break end
-                local petInfo = petDataMap[petId]
-                if petInfo then
-                    local foundEnchantName = hasDesiredEnchant(petInfo, targetEnchants)
+            Fluent:Notify({Title = "Now Rerolling", Content = "Focusing on: " .. (petInfo.name or "Unknown"), Duration = 3})
+
+            -- Inner loop: Reroll this single pet until it's done or user stops
+            local petIsDone = false
+            while not petIsDone and isRerolling do
+                local currentPetData = (function()
+                    for _, p in pairs(LocalData:Get().Pets) do if p.Id == petId then return p end end
+                end)()
+
+                if currentPetData then
+                    local foundEnchantName = hasDesiredEnchant(currentPetData, targetEnchants)
                     if foundEnchantName then
-                        completedCount = completedCount + 1
-                        if not completedPets[petId] then
-                            local successString = "✅ " .. (petInfo.Name or petId) .. " (" .. foundEnchantName .. ")"
-                            updateStatus(successString)
-                            
-                            -- FIXED: Store the full success string, including the enchant name.
-                            completedPets[petId] = successString
-                            
-                            local completedDisplayList = {}
-                            for _, text in pairs(completedPets) do table.insert(completedDisplayList, text) end
-                            updateCompletedStatus(completedDisplayList)
-                            task.wait(0.5)
-                        end
+                        -- Success! Pet is done.
+                        Fluent:Notify({Title = "Success!", Content = (petInfo.name or "Unknown") .. " got " .. foundEnchantName, Duration = 4})
+                        petIsDone = true -- Break the inner while loop
                     else
-                        updateStatus("🔁 Rerolling: " .. (petInfo.Name or petId))
+                        -- Not done, reroll it
                         RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
-                        if completedPets[petId] then
-                           completedPets[petId] = nil
-                           local completedDisplayList = {}
-                           for _, text in pairs(completedPets) do table.insert(completedDisplayList, text) end
-                           updateCompletedStatus(completedDisplayList)
-                        end
                         task.wait(Options.RerollSpeedSlider.Value)
                     end
+                else
+                    -- Pet not found, something is wrong
+                    Fluent:Notify({Title = "Error", Content = "Could not find pet with ID: "..petId, Duration = 5})
+                    petIsDone = true -- Stop trying for this pet
                 end
             end
-            
-            if #targetPetIds > 0 and completedCount == #targetPetIds then
-                updateStatus("🎉 All selected pets have a target enchant!")
-                RerollToggle:SetValue(false)
-                isRerolling = false
-            end
-            
-            task.wait(0.1)
+        end
+
+        -- 3. After the main loop finishes
+        if isRerolling then
+            Fluent:Notify({Title = "Complete!", Content = "All selected pets have been processed.", Duration = 5})
+            RerollToggle:SetValue(false) -- Auto-turn off the toggle
         end
     end)
 end)
 
+-- Background task to keep pet list updated
 task.spawn(function()
     while task.wait(2) do
         if Fluent.Unloaded then break end
