@@ -1,4 +1,4 @@
--- ================== PART 1: LOABombshellD LIBRARIES (Safely) ==================
+-- ================== PART 1: LOAD LIBRARIES (Safasfdsaasytgwaseyewqywer4y2w34yt234yt23ytely) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -94,22 +94,16 @@ local Window = Fluent:CreateWindow({
 
 local Tabs = { Main = Window:AddTab({ Title = "Reroller", Icon = "swords" }) }
 
--- UI elements are now reorganized
-local RerollToggle = Tabs.Main:AddToggle("RerollToggle", {
-    Title = "Start / Stop Rerolling", Default = false
-})
-
+local RerollToggle = Tabs.Main:AddToggle("RerollToggle", { Title = "Start / Stop Rerolling", Default = false })
 local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
     Title = "Pets to Reroll", Description = "Select which equipped pets to include.",
     Values = (function() local n = {} for _,v in ipairs(getEquippedPetsData()) do table.insert(n, v.name) end return n end)(),
     Multi = true, Default = {}
 })
-
 local EnchantDropdown = Tabs.Main:AddDropdown("TargetEnchantsDropdown", {
     Title = "Target Enchants", Description = "Will stop on any selected enchant.",
     Values = AllEnchants, Multi = true, Default = {}
 })
-
 local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
     Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts. Lower is faster.",
     Default = 0.4, Min = 0.1, Max = 2.0, Rounding = 1
@@ -121,7 +115,6 @@ local function updateStatus(newContent)
     if StatusParagraph then StatusParagraph:Destroy() end
     StatusParagraph = Tabs.Main:AddParagraph({ Title = "Action Log", Content = newContent })
 end
-
 local function updateCompletedStatus(completedList)
     if CompletedPetsParagraph then CompletedPetsParagraph:Destroy() end
     CompletedPetsParagraph = Tabs.Main:AddParagraph({ Title = "Completed Pets", Content = table.concat(completedList, "\n") })
@@ -132,7 +125,7 @@ updateCompletedStatus({"None"})
 
 -- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
 local equippedPetsData = getEquippedPetsData()
-local completedPets = {} -- Using pet IDs as keys
+local completedPets = {}
 
 RerollToggle:OnChanged(function(value)
     isRerolling = value
@@ -143,7 +136,7 @@ RerollToggle:OnChanged(function(value)
 
     task.spawn(function()
         updateStatus("⏳ Starting...")
-        completedPets = {} -- Reset the list of completed pets
+        completedPets = {}
         updateCompletedStatus({"None"})
 
         local selectedPetNames = Options.EquippedPetDropdown.Value
@@ -179,12 +172,15 @@ RerollToggle:OnChanged(function(value)
                     if foundEnchantName then
                         completedCount = completedCount + 1
                         if not completedPets[petId] then
-                            updateStatus("✅ Success: " .. (petInfo.Name or petId) .. " now has " .. foundEnchantName)
-                            completedPets[petId] = petInfo.Name or petId
+                            local successString = "✅ " .. (petInfo.Name or petId) .. " (" .. foundEnchantName .. ")"
+                            updateStatus(successString)
                             
-                            local completedNames = {}
-                            for _, name in pairs(completedPets) do table.insert(completedNames, name) end
-                            updateCompletedStatus(completedNames)
+                            -- FIXED: Store the full success string, including the enchant name.
+                            completedPets[petId] = successString
+                            
+                            local completedDisplayList = {}
+                            for _, text in pairs(completedPets) do table.insert(completedDisplayList, text) end
+                            updateCompletedStatus(completedDisplayList)
                             task.wait(0.5)
                         end
                     else
@@ -192,19 +188,18 @@ RerollToggle:OnChanged(function(value)
                         RemoteFunction:InvokeServer("RerollEnchants", petId, "Gems")
                         if completedPets[petId] then
                            completedPets[petId] = nil
-                           local completedNames = {}
-                           for _, name in pairs(completedPets) do table.insert(completedNames, name) end
-                           updateCompletedStatus(completedNames)
+                           local completedDisplayList = {}
+                           for _, text in pairs(completedPets) do table.insert(completedDisplayList, text) end
+                           updateCompletedStatus(completedDisplayList)
                         end
                         task.wait(Options.RerollSpeedSlider.Value)
                     end
                 end
             end
             
-            -- Check if all selected pets are completed
             if #targetPetIds > 0 and completedCount == #targetPetIds then
                 updateStatus("🎉 All selected pets have a target enchant!")
-                RerollToggle:SetValue(false) -- Auto-turn off the toggle
+                RerollToggle:SetValue(false)
                 isRerolling = false
             end
             
