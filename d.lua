@@ -1,4 +1,4 @@
--- Standalone Auto-Delete Script (Debug Version)
+-- Standalone Auto-Delete Script (Final Version)
 
 ---------------------------------------------------------------------
 -- ## CONFIGURATION ##
@@ -31,66 +31,63 @@ if not playerData then
 end
 
 -- Safety first: Get a list of all pet IDs that are currently equipped on any team.
-print("--- Finding Equipped Pets ---")
 local equippedPetIds = {}
 if playerData.Teams then
-    for teamId, teamData in pairs(playerData.Teams) do
+    for _, teamData in pairs(playerData.Teams) do
         if teamData.Pets then
             for _, petId in ipairs(teamData.Pets) do
-                print("Found equipped pet ID on team '" .. teamId .. "': " .. petId)
                 equippedPetIds[petId] = true
             end
         end
     end
 end
-print("--- Finished Finding Equipped Pets ---")
-print(" ") -- Spacer
 
-print("--- Starting Auto-Delete Process ---")
-local deletedCount = 0
+-- ## PHASE 1: IDENTIFY PETS TO DELETE ##
+print("Phase 1: Reading inventory and identifying pets to delete...")
+local petsToDelete = {} -- Create a new, temporary list
 
--- Loop through every pet in the player's inventory
-for i, petInstance in pairs(playerData.Pets) do
-    print("Checking inventory pet slot #" .. i .. ": " .. petInstance.Name .. " (ID: " .. petInstance.Id .. ")")
-
-    -- SAFETY CHECK 1: Skip the pet if it's in the equipped list
+-- Loop through every pet in the player's inventory to read them
+for _, petInstance in pairs(playerData.Pets) do
+    -- Skip if pet is equipped
     if equippedPetIds[petInstance.Id] then
-        print(" > Decision: Skipping equipped pet.")
-        print(" ") -- Spacer
         continue
     end
 
-    -- Look up the pet's base data and rarity from the database
+    -- Look up the pet's rarity
     local petBaseData = PetDatabase[petInstance.Name]
     if petBaseData and petBaseData.Rarity then
         local rarity = petBaseData.Rarity
-        print(" > Found rarity: " .. rarity)
         
-        -- CHECK 2: See if this pet's rarity is in our delete list
+        -- If rarity matches our list, add its ID to our temporary list
         if raritiesToDelete[rarity] then
-            print(" > Decision: Rarity is in delete list. DELETING.")
-            
-            -- Prepare the arguments to send to the server
-            local args = {
-                "DeletePet",
-                petInstance.Id, -- The unique ID of the pet to delete
-                1,              -- Quantity
-                false           -- Is equipped (we know it's false because of our safety check)
-            }
-            
-            -- Fire the delete event
-            RemoteEvent:FireServer(unpack(args))
-            deletedCount = deletedCount + 1
-            
-            -- Add a small delay to avoid overwhelming the server
-            task.wait(0.5) 
-        else
-            print(" > Decision: Rarity is NOT in delete list. Skipping.")
+            print("  > Marked for deletion: " .. petInstance.Name .. " (Rarity: " .. rarity .. ")")
+            table.insert(petsToDelete, {Id = petInstance.Id, Name = petInstance.Name})
         end
-    else
-        print(" > Decision: Could not find pet in database. Skipping.")
     end
-    print(" ") -- Spacer
+end
+print("Phase 1 Complete. Found " .. #petsToDelete .. " pets to delete.")
+print(" ") -- Spacer
+
+-- ## PHASE 2: DELETE THE IDENTIFIED PETS ##
+print("Phase 2: Sending delete commands...")
+
+if #petsToDelete > 0 then
+    -- Now, loop through our safe, temporary list
+    for _, petInfo in ipairs(petsToDelete) do
+        print("  > Deleting: " .. petInfo.Name)
+        
+        local args = {
+            "DeletePet",
+            petInfo.Id, -- The unique ID of the pet to delete
+            1,          -- Quantity
+            false       -- Is equipped (always false)
+        }
+        
+        RemoteEvent:FireServer(unpack(args))
+        
+        -- Wait a moment before deleting the next one
+        task.wait(0.5) 
+    end
 end
 
-print("--- Auto-delete complete! Deleted " .. deletedCount .. " pets. ---")
+print("--- Auto-delete complete! Deleted " .. #petsToDelete .. " pets. ---")
