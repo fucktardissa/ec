@@ -1,4 +1,4 @@
--- =================fix
+-- ================== PART 1: LOAD LIBRARIES (SafeFINALy) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -92,7 +92,7 @@ local function getEquippedPetsForDisplay()
     return petsForDisplay
 end
 
--- ⭐ NEW: Can now check a 'specificSlot' if provided, making it more reliable.
+-- ⭐ FINAL VERSION: Can now check a 'specificSlot' if provided, making it more reliable.
 local function findEnchantSlot(petInfo, targetEnchants, specificSlot)
     if not petInfo or not petInfo.Enchants then return nil, nil end
 
@@ -123,13 +123,14 @@ local function findEnchantSlot(petInfo, targetEnchants, specificSlot)
     return nil, nil -- Not found
 end
 
+
 -- ================== PART 4: BUILD THE FLUENT UI ==================
 local Window = Fluent:CreateWindow({
     Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 480),
     Acrylic = true, Theme = "Dark", MinimizeKey = Enum.KeyCode.LeftControl
 })
 
-local Tabs = { Main = Window:AddTab({ Title = "Reroller", Icon = "rbxassetid://13103328828" }) } -- Custom Icon
+local Tabs = { Main = Window:AddTab({ Title = "Reroller", Icon = "rbxassetid://13103328828" }) }
 
 local RerollToggle = Tabs.Main:AddToggle("RerollToggle", { Title = "Start / Stop Rerolling", Default = false })
 local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
@@ -142,12 +143,13 @@ local EnchantDropdown = Tabs.Main:AddDropdown("TargetEnchantsDropdown", {
     Values = AllEnchants, Multi = true, Default = {}
 })
 
--- ⭐ NEW: Secondary Enchant Dropdown
 local SecondaryEnchantDropdown = Tabs.Main:AddDropdown("SecondaryEnchantDropdown", {
     Title = "Secondary Target Enchants", Description = "After finding a primary, will reroll the OTHER slot for one of these.",
     Values = AllEnchants, Multi = true, Default = {}
 })
---Tabs.Main:AddLabel("InfoLabel", {Title = "Secondary rerolling only works on Shiny pets."}):SetColor(Color3.fromRGB(255, 200, 0))
+
+-- The user decided this label was not needed.
+-- Tabs.Main:AddLabel("InfoLabel", {Title = "Secondary rerolling only works on Shiny pets."}):SetColor(Color3.fromRGB(255, 200, 0))
 
 local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
     Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts.",
@@ -157,6 +159,7 @@ local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
 -- ================== PART 5: CORE REROLL & REFRESH LOGIC ==================
 local equippedPetsForDisplay = getEquippedPetsForDisplay()
 
+-- ⭐ FINAL VERSION: Uses the improved findEnchantSlot function for reliable secondary checking.
 RerollToggle:OnChanged(function(value)
     isRerolling = value
     if not isRerolling then
@@ -184,7 +187,7 @@ RerollToggle:OnChanged(function(value)
             RerollToggle:SetValue(false); isRerolling = false; return
         end
 
-        -- 2. New Reroll Logic: Process one pet at a time
+        -- 2. Reroll Logic: Process one pet at a time
         for _, petId in ipairs(targetPetIds) do
             if not isRerolling then break end
 
@@ -202,7 +205,7 @@ RerollToggle:OnChanged(function(value)
                 local primaryName, primarySlot = findEnchantSlot(currentPetData, primaryTargets)
 
                 if primaryName then
-                    -- ✅ PHASE 2: PRIMARY FOUND.
+                    -- ✅ PHASE 2: PRIMARY FOUND. Now work on the secondary.
                     if #secondaryTargets == 0 then
                         Fluent:Notify({ Title = "Success!", Content = ("%s got primary enchant %s."):format(petInfo.name, primaryName), Duration = 5 })
                         petIsDone = true; continue
@@ -215,7 +218,7 @@ RerollToggle:OnChanged(function(value)
                     
                     local secondarySlotToWorkOn = (primarySlot == 1) and 2 or 1
                     
-                    -- ⭐ MODIFIED PART: Directly check the real pet data on the specific secondary slot.
+                    -- Directly check the real pet data on the specific secondary slot.
                     local secondaryName, _ = findEnchantSlot(currentPetData, secondaryTargets, secondarySlotToWorkOn)
                     
                     if secondaryName then
