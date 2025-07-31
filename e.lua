@@ -1,4 +1,3 @@
--- ================== PART 1: LOAD LIBRARIES (SafeFINALy) ==================
 local success, Fluent = pcall(function()
     return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
@@ -16,11 +15,9 @@ local LocalData = require(ReplicatedStorage:WaitForChild("Client"):WaitForChild(
 local RemoteFunction = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteFunction
 local RerollEvent = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
 
--- ================== PART 2: DATA, CONFIG, & STATE ==================
 local isRerolling = false
 local Options = Fluent.Options
 
--- A comprehensive list of all possible enchants
 local AllEnchants = {
     "Bubbler I", "Bubbler II", "Bubbler III", "Bubbler IV", "Bubbler V", "Gleaming I", "Gleaming II", "Gleaming III",
     "Looter I", "Looter II", "Looter III", "Looter IV", "Looter V", "Team Up I", "Team Up II", "Team Up III", "Team Up IV", "Team Up V",
@@ -28,8 +25,6 @@ local AllEnchants = {
 }
 local enchantLookup = {}
 
--- ================== PART 3: HELPER FUNCTIONS & SETUP ==================
--- Parses an enchant's full name (e.g., "Looter V") into its ID ("looter") and level (5)
 local function parseEnchantName(name)
     local romanMap = { I = 1, II = 2, III = 3, IV = 4, V = 5 }
     local baseName, roman = name:match("^(.*) (%S+)$")
@@ -126,7 +121,7 @@ end
 
 -- ================== PART 4: BUILD THE FLUENT UI ==================
 local Window = Fluent:CreateWindow({
-    Title = "Pet Helper", SubTitle = "Enchant Reroller", TabWidth = 160, Size = UDim2.fromOffset(540, 480),
+    Title = "issa's enchanter", SubTitle = "", TabWidth = 160, Size = UDim2.fromOffset(540, 480),
     Acrylic = true, Theme = "Dark", MinimizeKey = Enum.KeyCode.LeftControl
 })
 
@@ -134,17 +129,17 @@ local Tabs = { Main = Window:AddTab({ Title = "Reroller", Icon = "rbxassetid://1
 
 local RerollToggle = Tabs.Main:AddToggle("RerollToggle", { Title = "Start / Stop Rerolling", Default = false })
 local PetDropdown = Tabs.Main:AddDropdown("EquippedPetDropdown", {
-    Title = "Pets to Reroll", Description = "Select which equipped pets to include.",
+    Title = "Pets to Reroll", Description = "Select which equipped pets to reroll.",
     Values = (function() local n = {} for _,v in ipairs(getEquippedPetsForDisplay()) do table.insert(n, v.name) end return n end)(),
     Multi = true, Default = {}
 })
 local EnchantDropdown = Tabs.Main:AddDropdown("TargetEnchantsDropdown", {
-    Title = "Primary Target Enchants", Description = "Will reroll BOTH slots to find one of these.",
+    Title = "Primary Enchants", Description = "Will reroll BOTH slots to find one of the selected enchants",
     Values = AllEnchants, Multi = true, Default = {}
 })
 
 local SecondaryEnchantDropdown = Tabs.Main:AddDropdown("SecondaryEnchantDropdown", {
-    Title = "Secondary Target Enchants", Description = "After finding a primary, will reroll the OTHER slot for one of these.",
+    Title = "Secondary Enchants", Description = "After finding a primary enchant, will reroll the OTHER slot for one of these.",
     Values = AllEnchants, Multi = true, Default = {}
 })
 
@@ -152,7 +147,7 @@ local SecondaryEnchantDropdown = Tabs.Main:AddDropdown("SecondaryEnchantDropdown
 -- Tabs.Main:AddLabel("InfoLabel", {Title = "Secondary rerolling only works on Shiny pets."}):SetColor(Color3.fromRGB(255, 200, 0))
 
 local SpeedSlider = Tabs.Main:AddSlider("RerollSpeedSlider", {
-    Title = "Reroll Speed (Delay)", Description = "Delay in seconds between reroll attempts.",
+    Title = "Reroll Speed", Description = "Delay in seconds between reroll attempts.",
     Default = 0.4, Min = 0.1, Max = 2.0, Rounding = 1
 })
 
