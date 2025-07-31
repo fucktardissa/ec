@@ -1,4 +1,4 @@
--- Standalone Auto-Delete Script
+-- Standalone Auto-Delete Script (Corrected Path)
 
 ---------------------------------------------------------------------
 -- ## CONFIGURATION ##
@@ -19,8 +19,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 -- Load game modules
--- IMPORTANT: This assumes you have your 'pet.txt' file saved as a ModuleScript named "PetDatabase"
-local PetDatabase = require(ReplicatedStorage.PetDatabase) 
+-- ## THIS LINE IS UPDATED WITH THE CORRECT PATH ##
+local PetDatabase = require(ReplicatedStorage.Shared.Data.Pets) 
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local RemoteEvent = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
 
