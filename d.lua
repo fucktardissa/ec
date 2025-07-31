@@ -1,4 +1,4 @@
--- Standalone Auto-Delete Script (Corrected Path)
+-- Standalone Auto-Delete Script (Debug Version)
 
 ---------------------------------------------------------------------
 -- ## CONFIGURATION ##
@@ -19,7 +19,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 -- Load game modules
--- ## THIS LINE IS UPDATED WITH THE CORRECT PATH ##
 local PetDatabase = require(ReplicatedStorage.Shared.Data.Pets) 
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local RemoteEvent = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
@@ -32,24 +31,32 @@ if not playerData then
 end
 
 -- Safety first: Get a list of all pet IDs that are currently equipped on any team.
+print("--- Finding Equipped Pets ---")
 local equippedPetIds = {}
 if playerData.Teams then
-    for _, teamData in pairs(playerData.Teams) do
+    for teamId, teamData in pairs(playerData.Teams) do
         if teamData.Pets then
             for _, petId in ipairs(teamData.Pets) do
+                print("Found equipped pet ID on team '" .. teamId .. "': " .. petId)
                 equippedPetIds[petId] = true
             end
         end
     end
 end
+print("--- Finished Finding Equipped Pets ---")
+print(" ") -- Spacer
 
-print("Starting auto-delete process... Pets on your teams will be ignored.")
+print("--- Starting Auto-Delete Process ---")
 local deletedCount = 0
 
 -- Loop through every pet in the player's inventory
-for _, petInstance in pairs(playerData.Pets) do
+for i, petInstance in pairs(playerData.Pets) do
+    print("Checking inventory pet slot #" .. i .. ": " .. petInstance.Name .. " (ID: " .. petInstance.Id .. ")")
+
     -- SAFETY CHECK 1: Skip the pet if it's in the equipped list
     if equippedPetIds[petInstance.Id] then
+        print(" > Decision: Skipping equipped pet.")
+        print(" ") -- Spacer
         continue
     end
 
@@ -57,10 +64,11 @@ for _, petInstance in pairs(playerData.Pets) do
     local petBaseData = PetDatabase[petInstance.Name]
     if petBaseData and petBaseData.Rarity then
         local rarity = petBaseData.Rarity
+        print(" > Found rarity: " .. rarity)
         
         -- CHECK 2: See if this pet's rarity is in our delete list
         if raritiesToDelete[rarity] then
-            print("Deleting pet: " .. petInstance.Name .. " (Rarity: " .. rarity .. ")")
+            print(" > Decision: Rarity is in delete list. DELETING.")
             
             -- Prepare the arguments to send to the server
             local args = {
@@ -76,8 +84,13 @@ for _, petInstance in pairs(playerData.Pets) do
             
             -- Add a small delay to avoid overwhelming the server
             task.wait(0.5) 
+        else
+            print(" > Decision: Rarity is NOT in delete list. Skipping.")
         end
+    else
+        print(" > Decision: Could not find pet in database. Skipping.")
     end
+    print(" ") -- Spacer
 end
 
-print("Auto-delete complete! Deleted " .. deletedCount .. " pets.")
+print("--- Auto-delete complete! Deleted " .. deletedCount .. " pets. ---")
