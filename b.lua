@@ -12,7 +12,7 @@ local Config = {
     -- A list of tile types the script should try to land on.
     -- Common types: "special-egg", "infinity", "super-ticket", "dice-key", "rift", "chance"
     TILES_TO_TARGET = {
-        ["special-egg"] = true,
+        ["special-egg"] = false,
         ["infinity"] = true,
     },
 
