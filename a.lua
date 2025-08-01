@@ -1,4 +1,4 @@
--- Master Auto-Farm & Hatching Script (v5 - Simplified)
+-- Master Auto-Farm & Hatching Script (v5 - Simplrfartified)
 
 --[[
     ============================================================
@@ -10,7 +10,7 @@ local Config = {
 
     -- Set the minimum amount for each currency.
     MIN_FESTIVAL_COINS = "30m",
-    MIN_TICKETS = "1b",
+    MIN_TICKETS = "1000000b",
     MIN_GEMS = "1m",
     MIN_COINS = "10b",
 
