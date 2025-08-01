@@ -1,4 +1,4 @@
--- Standalone Intelligent Auto-Dice Script
+-- Standalone Intelligent Auto-Dice Script (with Extra Debug)
 
 --[[
     ============================================================
@@ -12,7 +12,7 @@ local Config = {
     -- A list of tile types the script should try to land on.
     -- Common types: "special-egg", "infinity", "super-ticket", "dice-key", "rift", "chance"
     TILES_TO_TARGET = {
-        ["special-egg"] = false,
+        ["special-egg"] = true,
         ["infinity"] = true,
     },
 
@@ -55,7 +55,7 @@ local function takeTurn(diceType)
         print("  > Waiting for turn to complete...")
         task.wait(Config.DelayAfterRoll)
         RemoteEvent:FireServer("ClaimTile")
-        task.wait(0.2) -- Extra delay for safety
+        task.wait(1.5) -- Extra delay for safety
         return true
     else
         print("  > Roll failed or was rejected. Retrying...")
@@ -76,38 +76,49 @@ while getgenv().Config.AutoBoardGame do
         local totalTiles = #BoardUtil.Nodes
         local actionTaken = false
 
+        print("---") -- Separator for clarity
+        print("Current Tile: " .. currentTileNumber)
+        
         -- 1. Golden Dice Snipe Logic
-        print("Scanning for Golden Dice targets within " .. Config.GOLDEN_DICE_DISTANCE .. " tiles...")
+        print("Scanning for Golden Dice targets (Range: " .. Config.GOLDEN_DICE_DISTANCE .. " tiles)...")
         for i = 1, Config.GOLDEN_DICE_DISTANCE do
             local nextTileIndex = currentTileNumber + i
             if nextTileIndex > totalTiles then nextTileIndex = nextTileIndex - totalTiles end
             
             local tileInfo = BoardUtil.Nodes[nextTileIndex]
-            if tileInfo and Config.TILES_TO_TARGET[tileInfo.Type] then
-                print("Target '" .. tileInfo.Type .. "' found " .. i .. " tiles away! Using Golden Dice...")
-                for j = 1, i do
-                    takeTurn("Golden Dice")
+            if tileInfo then
+                -- ## NEW DEBUG MESSAGE ##
+                print("  -> Upcoming #" .. i .. " (Tile " .. nextTileIndex .. "): " .. tileInfo.Type)
+                if Config.TILES_TO_TARGET[tileInfo.Type] then
+                    print("   - TARGET FOUND! Using Golden Dice...")
+                    for j = 1, i do
+                        takeTurn("Golden Dice")
+                    end
+                    actionTaken = true
+                    break
                 end
-                actionTaken = true
-                break
             end
         end
 
-        if actionTaken then continue end -- Restart the loop after sniping
+        if actionTaken then continue end
 
         -- 2. Primary Dice Chance Logic
         local maxRoll = (Config.DICE_TYPE == "Dice" and 6 or 10)
-        print("Scanning for targets within " .. maxRoll .. " tiles for a chance roll...")
+        print("Scanning for targets for a chance roll (Range: " .. maxRoll .. " tiles)...")
         for i = 1, maxRoll do
             local nextTileIndex = currentTileNumber + i
             if nextTileIndex > totalTiles then nextTileIndex = nextTileIndex - totalTiles end
 
             local tileInfo = BoardUtil.Nodes[nextTileIndex]
-            if tileInfo and Config.TILES_TO_TARGET[tileInfo.Type] then
-                print("Target '" .. tileInfo.Type .. "' found in range! Using " .. Config.DICE_TYPE .. " for a chance...")
-                takeTurn(Config.DICE_TYPE)
-                actionTaken = true
-                break
+            if tileInfo then
+                -- ## NEW DEBUG MESSAGE ##
+                print("  -> Upcoming #" .. i .. " (Tile " .. nextTileIndex .. "): " .. tileInfo.Type)
+                if Config.TILES_TO_TARGET[tileInfo.Type] then
+                    print("   - TARGET FOUND! Using " .. Config.DICE_TYPE .. " for a chance...")
+                    takeTurn(Config.DICE_TYPE)
+                    actionTaken = true
+                    break
+                end
             end
         end
         
