@@ -1,14 +1,14 @@
--- Standalone Upvalue Scanner (Auto-Search Version)
+-- Standalone Upvalue Scanner (Final Comprehensive Version)
 
-print("Starting upvalue scan...")
+print("Starting FINAL upvalue scan...")
 
--- Get ReplicatedStorage service
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
--- ## THIS PART IS NEW ##
--- Automatically search for the 'Chunker' module anywhere inside ReplicatedStorage
+-- Automatically search for the 'Chunker' module
 print("Searching for the 'Chunker' ModuleScript...")
-local chunkerModuleInstance = ReplicatedStorage:FindFirstChild("Chunker", true) -- The 'true' makes it search all subfolders
+local chunkerModuleInstance = ReplicatedStorage:FindFirstChild("Chunker", true)
 
 if not chunkerModuleInstance then
     warn("ERROR: Could not find a ModuleScript named 'Chunker' anywhere in ReplicatedStorage.")
@@ -16,45 +16,67 @@ if not chunkerModuleInstance then
 end
 
 print("Found 'Chunker' module at: " .. chunkerModuleInstance:GetFullName())
-
--- Load the found module
 local chunkerModule = require(chunkerModuleInstance)
--------------------------------------------------------------
+print("Target module loaded. Now performing comprehensive scan...")
 
-print("Target module 'Chunker' loaded successfully. Now searching for scripts that are using it.")
-
--- Get a list of all running scripts (threads)
-local allScripts = getscripts()
 local found = false
 
-for _, scriptThread in ipairs(allScripts) do
-    if scriptThread.ClassName == "LocalScript" then
-        -- An upvalue is a variable that a function 'remembers'. 
-        -- We'll check the first 64 upvalues of each script, which is usually more than enough.
-        for i = 1, 64 do
-            -- Get the name and value of the upvalue
-            local name, value = debug.getupvalue(scriptThread, i)
+-- The core function that scans a function's upvalues
+local function scanFunction(func, signalName)
+    if found or typeof(func) ~= "function" then return end
+
+    local success, funcInfo = pcall(debug.info, func, "u")
+    local numUpvalues = (success and funcInfo and funcInfo.nups) or 0
+
+    for i = 1, numUpvalues do
+        local name, value = debug.getupvalue(func, i)
+        if value == chunkerModule then
+            local sourceInfo = debug.info(func, "S")
+            local scriptPath = sourceInfo and sourceInfo.source or "Unknown"
+            if scriptPath:sub(1,1) == "@" then scriptPath = scriptPath:sub(2) end
+
+            print("---------------------------------")
+            print("!!! HIT !!!")
+            print("Found a function connected to '" .. signalName .. "' that uses the Chunker module:")
+            print(" -> SCRIPT PATH: " .. scriptPath)
+            print("---------------------------------")
             
-            -- If the value doesn't exist, there are no more upvalues for this script.
-            if not name then break end
-            
-            -- Check if the value is the Chunker module we loaded earlier
-            if value == chunkerModule then
-                print("---------------------------------")
-                print("!!! HIT !!!")
-                print("Found a script that required the Chunker module:")
-                print(" -> SCRIPT PATH: " .. scriptThread:GetFullName())
-                print("---------------------------------")
-                found = true
-                break -- Stop checking this script's upvalues
-            end
-        end
-        if found then
-            break -- Stop checking other scripts
+            found = true
+            break
         end
     end
 end
 
+-- A list of many common signals to check
+local signalsToScan = {
+    RunService.Heartbeat,
+    RunService.RenderStepped,
+    RunService.Stepped,
+    Players.LocalPlayer.CharacterAdded,
+    Players.PlayerAdded,
+    Players.PlayerRemoving
+}
+
+-- Add all RemoteEvent signals to our scan list
+for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+    if remote:IsA("RemoteEvent") then
+        table.insert(signalsToScan, remote.OnClientEvent)
+    end
+end
+
+print("Scanning " .. #signalsToScan .. " different game signals...")
+
+-- Loop through the comprehensive list of signals
+for _, signal in ipairs(signalsToScan) do
+    if found then break end
+    local connections = getconnections(signal)
+    for _, connection in ipairs(connections) do
+        if found then break end
+        -- Pass the signal's name for better logging
+        scanFunction(connection.Function, signal:GetFullName())
+    end
+end
+
 if not found then
-    print("Scan complete. No script was found holding a direct reference to the Chunker module via this method.")
+    print("Scan complete. No direct reference was found. The controller script is exceptionally well hidden.")
 end
