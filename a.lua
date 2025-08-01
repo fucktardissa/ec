@@ -1,4 +1,4 @@
--- Master Auto-Farm & Hatching Script (Multitasking v2)
+-- Master Auto-Farm & Hatching Script (v5 - Simplified)
 
 --[[
     ============================================================
@@ -10,18 +10,16 @@ local Config = {
 
     -- Set the minimum amount for each currency.
     MIN_FESTIVAL_COINS = "30m",
-    MIN_TICKETS = "100000b",
+    MIN_TICKETS = "1b",
     MIN_GEMS = "1m",
     MIN_COINS = "10b",
 
     -- ## Optional Multitasking Actions ##
-    -- Set these to true to perform a second action WHILE farming at a location.
-    HatchEggWhileFarmingFestivalCoins = true, -- Hatches the Festival Egg while farming at Spawn
-    HatchEggWhileFarmingGemsAndCoins = true, -- Hatches the Rainbow Egg while farming at Zen Island
-    HatchEggWhileFarmingTickets = true,      -- Hatches the Neon Egg while farming at Hyperwave Island
-    PlayMinigameWhileFarmingTickets = true,  -- Plays "Hyper Darts" while farming at Hyperwave Island
-    
-    HatchDuration = 15.0 -- Only used if a Hatch task is selected
+    HatchEggWhileFarmingFestivalCoins = true,
+    HatchEggWhileFarmingGemsAndCoins = true,
+    HatchEggWhileFarmingTickets = true,
+    -- ## UPDATED ##: Simplified to a single toggle for Hyper Darts.
+    PlayHyperDartsWhileFarmingTickets = true,
 }
 getgenv().Config = Config
 
@@ -76,17 +74,20 @@ local function collectNearbyPickups()
     for _, child in ipairs(renderedFolder:GetChildren()) do
         if child.Name == "Chunker" then
             for _, item in ipairs(child:GetChildren()) do
-                collectRemote:FireServer(item.Name)
-                item:Destroy()
-                task.wait()
+                if string.find(item.Name, "-") then
+                    collectRemote:FireServer(item.Name)
+                    item:Destroy()
+                    task.wait()
+                end
             end
         end
     end
 end
 
-local function playMinigame(name)
-    RemoteEvent:FireServer("SkipMinigameCooldown", name)
-    RemoteEvent:FireServer("StartMinigame", name, "Insane")
+-- ## UPDATED ##: Simplified to one specific minigame function.
+local function playHyperDarts()
+    RemoteEvent:FireServer("SkipMinigameCooldown", "Hyper Darts")
+    RemoteEvent:FireServer("StartMinigame", "Hyper Darts", "Insane")
     RemoteEvent:FireServer("FinishMinigame")
 end
 
@@ -101,7 +102,6 @@ while getgenv().Config.AutoFarm do
     local minGems = parseCurrency(getgenv().Config.MIN_GEMS)
     local minCoins = parseCurrency(getgenv().Config.MIN_COINS)
 
-    -- 1. Decide which currency to prioritize
     if getCurrency("FestivalCoins") < minFestival then
         currentTask = "Festival"
     elseif getCurrency("Tickets") < minTickets then
@@ -112,94 +112,62 @@ while getgenv().Config.AutoFarm do
         currentTask = "Coins"
     end
 
-    -- 2. Execute the chosen task
     if currentTask == "Festival" then
         print("Task: Farming Festival Coins.")
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn")
         task.wait(3)
-        -- The standing point will be the egg, as it's close enough to farm coins as well.
         tweenTo(workspace.Worlds["The Overworld"].Egg.Position)
-        
-        -- Start multitasking threads
-        local farmingThread = task.spawn(function()
-            while getgenv().Config.AutoFarm and getCurrency("FestivalCoins") < minFestival do
-                collectNearbyPickups()
-                task.wait(5)
-            end
+        local mainCondition = function() return getgenv().Config.AutoFarm and getCurrency("FestivalCoins") < minFestival end
+        task.spawn(function()
+            while mainCondition() do collectNearbyPickups() task.wait(5) end
         end)
-        
         if getgenv().Config.HatchEggWhileFarmingFestivalCoins then
             task.spawn(function()
-                while getgenv().Config.AutoFarm and getCurrency("FestivalCoins") < minFestival do
-                    openRegularEgg()
-                end
+                while mainCondition() do openRegularEgg() end
             end)
         end
-        
-        -- Wait for the primary condition (currency goal) to be met
-        repeat task.wait(1) until not (getgenv().Config.AutoFarm and getCurrency("FestivalCoins") < minFestival)
-
+        repeat task.wait(1) until not mainCondition()
 
     elseif currentTask == "Tickets" then
         print("Task: Farming Tickets.")
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn")
         task.wait(3)
-        
-        -- Start multitasking threads
-        local farmingThread = task.spawn(function()
-            while getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets do
-                collectNearbyPickups()
-                task.wait(5)
-            end
-        end)
-        
+        local mainCondition = function() return getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets end
         if getgenv().Config.HatchEggWhileFarmingTickets then
             tweenTo(workspace.Worlds["Minigame Paradise"].Islands["Hyperwave Island"].Island.Egg.Position)
             task.spawn(function()
-                while getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets do
-                    openRegularEgg()
-                end
+                while mainCondition() do openRegularEgg() end
             end)
         end
-        
-        if getgenv().Config.PlayMinigameWhileFarmingTickets then
+        if getgenv().Config.PlayHyperDartsWhileFarmingTickets then
             task.spawn(function()
-                while getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets do
-                    playMinigame("Hyper Darts")
-                    task.wait(2) -- Cooldown for minigame
-                end
+                while mainCondition() do playHyperDarts() task.wait(2) end
             end)
         end
-        
-        repeat task.wait(1) until not (getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets)
+        while mainCondition() do
+            collectNearbyPickups()
+            task.wait(5)
+        end
 
     elseif currentTask == "Gems" or currentTask == "Coins" then
         print("Task: Farming Gems and Coins.")
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn")
         task.wait(3)
-        
-        -- Start multitasking threads
-        local farmingThread = task.spawn(function()
-            while getgenv().Config.AutoFarm and (getCurrency("Gems") < minGems or getCurrency("Coins") < minCoins) do
-                collectNearbyPickups()
-                task.wait(5)
-            end
-        end)
-        
+        local mainCondition = function() return getgenv().Config.AutoFarm and (getCurrency("Gems") < minGems or getCurrency("Coins") < minCoins) end
         if getgenv().Config.HatchEggWhileFarmingGemsAndCoins then
             tweenTo(workspace.Worlds["The Overworld"].Islands.Zen.Island.EggPlatformSpawn.Position)
             task.spawn(function()
-                while getgenv().Config.AutoFarm and (getCurrency("Gems") < minGems or getCurrency("Coins") < minCoins) do
-                    openRegularEgg()
-                end
+                while mainCondition() do openRegularEgg() end
             end)
         end
-        
-        repeat task.wait(1) until not (getgenv().Config.AutoFarm and (getCurrency("Gems") < minGems or getCurrency("Coins") < minCoins))
+        while mainCondition() do
+            collectNearbyPickups()
+            task.wait(5)
+        end
         
     else
         print("All currency minimums met. Idling...")
-        task.wait(10) -- Long wait since nothing needs to be done
+        task.wait(10)
     end
 end
 
