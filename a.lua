@@ -1,4 +1,4 @@
--- Master Auto-Farm & Hatching Script (v6 - Bug Fix)
+-- Master Auto-Farm & Hatching Script (v8 - Hardcoded CFrame)
 
 --[[
     ============================================================
@@ -9,7 +9,7 @@ local Config = {
     AutoFarm = true,
 
     MIN_FESTIVAL_COINS = "30m",
-    MIN_TICKETS = "1223232323b",
+    MIN_TICKETS = "1123123123b",
     MIN_GEMS = "1m",
     MIN_COINS = "10b",
 
@@ -25,6 +25,9 @@ getgenv().Config = Config
     -- CORE SCRIPT (No need to edit below this line)
     ============================================================
 ]]
+
+-- ## Hardcoded Positions ##
+local hyperwaveEggPosition = Vector3.new(9885, 20089, 256)
 
 -- ## Services & Player Info ##
 local TweenService = game:GetService("TweenService")
@@ -131,24 +134,16 @@ while getgenv().Config.AutoFarm do
         local mainCondition = function() return getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets end
 
         if getgenv().Config.HatchEggWhileFarmingTickets then
-            -- ## THIS IS THE CORRECTED PART ##
-            local eggModel = workspace.Worlds["Minigame Paradise"].Islands["Hyperwave Island"].Island:FindFirstChild("Egg")
-            if eggModel and eggModel.PrimaryPart then
-                tweenTo(eggModel.PrimaryPart.Position)
-                task.spawn(function()
-                    while mainCondition() do openRegularEgg() end
-                end)
-            else
-                warn("Could not find Neon Egg to tween to. Skipping hatching.")
-            end
+            tweenTo(hyperwaveEggPosition)
+            task.spawn(function()
+                while mainCondition() do openRegularEgg() end
+            end)
         end
-
         if getgenv().Config.PlayHyperDartsWhileFarmingTickets then
             task.spawn(function()
                 while mainCondition() do playHyperDarts() task.wait(2) end
             end)
         end
-        
         while mainCondition() do
             collectNearbyPickups()
             task.wait(5)
