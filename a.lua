@@ -1,4 +1,4 @@
--- Master Auto-Farm & Hatching Script (v8 - Hardcoded CFrame)
+-- Master Auto-Farm & Hatching Script (v8 - Hardcoasdasdasddasded CFrame)
 
 --[[
     ============================================================
@@ -56,7 +56,7 @@ local function tweenTo(position)
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 150
+    local time = dist / 10
     local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
     tween:Play()
     tween.Completed:Wait()
