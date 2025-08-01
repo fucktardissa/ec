@@ -1,4 +1,4 @@
--- Standalone Upvalue Scanner (Thread-Safe Version)
+-- Standalone Upvalue Scanner (Final Version)
 
 print("Starting upvalue scan...")
 
@@ -37,19 +37,21 @@ for _, signal in ipairs(signalsToCheck) do
     for _, connection in ipairs(connections) do
         local func = connection.Function
         
-        -- ## THIS IS THE NEW CHECK ##
-        -- Make sure 'func' is a normal function before trying to inspect it.
         if typeof(func) == "function" then
-            -- Scan the upvalues of each connected function
-            for i = 1, 64 do
+            -- ## THIS IS THE CORRECTED LOGIC ##
+            -- First, get the exact number of upvalues the function has.
+            local success, funcInfo = pcall(debug.info, func, "u")
+            local numUpvalues = (success and funcInfo and funcInfo.nups) or 0
+
+            -- Now, loop only up to that exact number.
+            for i = 1, numUpvalues do
                 local name, value = debug.getupvalue(func, i)
-                if not name then break end
                 
                 -- Check if the upvalue is the Chunker module
                 if value == chunkerModule then
                     -- If it is, get the source script of that function
-                    local funcInfo = debug.info(func, "S")
-                    local scriptPath = funcInfo and funcInfo.source or "Unknown"
+                    local sourceInfo = debug.info(func, "S")
+                    local scriptPath = sourceInfo and sourceInfo.source or "Unknown"
                     if scriptPath:sub(1,1) == "@" then scriptPath = scriptPath:sub(2) end
 
                     print("---------------------------------")
