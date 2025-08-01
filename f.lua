@@ -1,82 +1,88 @@
--- Standalone Upvalue Scanner (Final Comprehensive Version)
-
-print("Starting FINAL upvalue scan...")
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
--- Automatically search for the 'Chunker' module
-print("Searching for the 'Chunker' ModuleScript...")
-local chunkerModuleInstance = ReplicatedStorage:FindFirstChild("Chunker", true)
-
-if not chunkerModuleInstance then
-    warn("ERROR: Could not find a ModuleScript named 'Chunker' anywhere in ReplicatedStorage.")
+-- Diagnostic finder for the live Chunker instance
+local islandsFolder = workspace.Worlds["The Overworld"].Islands
+local samplePos
+for _, island in ipairs(islandsFolder:GetChildren()) do
+    if island:IsA("Model") and island:FindFirstChild("UnlockHitbox") then
+        samplePos = island.UnlockHitbox.Position
+        break
+    end
+end
+if not samplePos then
+    warn("No island UnlockHitbox found; aborting diagnostic.")
     return
 end
 
-print("Found 'Chunker' module at: " .. chunkerModuleInstance:GetFullName())
-local chunkerModule = require(chunkerModuleInstance)
-print("Target module loaded. Now performing comprehensive scan...")
-
-local found = false
-
--- The core function that scans a function's upvalues
-local function scanFunction(func, signalName)
-    if found or typeof(func) ~= "function" then return end
-
-    local success, funcInfo = pcall(debug.info, func, "u")
-    local numUpvalues = (success and funcInfo and funcInfo.nups) or 0
-
-    for i = 1, numUpvalues do
-        local name, value = debug.getupvalue(func, i)
-        if value == chunkerModule then
-            local sourceInfo = debug.info(func, "S")
-            local scriptPath = sourceInfo and sourceInfo.source or "Unknown"
-            if scriptPath:sub(1,1) == "@" then scriptPath = scriptPath:sub(2) end
-
-            print("---------------------------------")
-            print("!!! HIT !!!")
-            print("Found a function connected to '" .. signalName .. "' that uses the Chunker module:")
-            print(" -> SCRIPT PATH: " .. scriptPath)
-            print("---------------------------------")
-            
-            found = true
-            break
+local candidates = {}
+for _, obj in ipairs(getgc(true)) do
+    if typeof(obj) == "table" then
+        -- Heuristic: has Update function and chunk-related fields
+        local hasUpdate = type(rawget(obj, "Update")) == "function"
+        local hasChunkSize = rawget(obj, "_chunkSize") ~= nil
+        local hasRenderDistance = rawget(obj, "RenderDistance") ~= nil
+        local hasLoadedTable = type(rawget(obj, "_loaded")) == "table"
+        if hasUpdate and hasChunkSize and hasRenderDistance and hasLoadedTable then
+            table.insert(candidates, obj)
         end
     end
 end
 
--- A list of many common signals to check
-local signalsToScan = {
-    RunService.Heartbeat,
-    RunService.RenderStepped,
-    RunService.Stepped,
-    Players.LocalPlayer.CharacterAdded,
-    Players.PlayerAdded,
-    Players.PlayerRemoving
-}
+if #candidates == 0 then
+    warn("❌ No candidate Chunker instances found with the basic heuristics.")
+else
+    print(("Found %d candidate(s):"):format(#candidates))
+    for idx, chunker in ipairs(candidates) do
+        local ok, info = pcall(function()
+            return {
+                chunkSize = chunker._chunkSize,
+                renderDistance = chunker.RenderDistance,
+                loadedCount = (function()
+                    local c = 0
+                    for k in pairs(chunker._loaded) do c = c + 1 end
+                    return c
+                end)()
+            }
+        end)
+        if ok then
+            print(("\n[%d] chunkSize=%s, RenderDistance=%s, loadedChunks=%s"):format(
+                idx,
+                tostring(info.chunkSize),
+                tostring(info.renderDistance),
+                tostring(info.loadedCount)
+            ))
+        else
+            print(("\n[%d] failed to read metadata from candidate"):format(idx))
+        end
 
--- Add all RemoteEvent signals to our scan list
-for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-    if remote:IsA("RemoteEvent") then
-        table.insert(signalsToScan, remote.OnClientEvent)
+        -- Try forcing an update on sample island and see if it errors
+        local success, err = pcall(function()
+            chunker:Update(samplePos)
+        end)
+        if success then
+            print(("  ➜ .Update(sampleIsland) succeeded on candidate %d"):format(idx))
+        else
+            print(("  ➜ .Update(sampleIsland) error on candidate %d: %s"):format(idx, tostring(err)))
+        end
     end
 end
 
-print("Scanning " .. #signalsToScan .. " different game signals...")
-
--- Loop through the comprehensive list of signals
-for _, signal in ipairs(signalsToScan) do
-    if found then break end
-    local connections = getconnections(signal)
-    for _, connection in ipairs(connections) do
-        if found then break end
-        -- Pass the signal's name for better logging
-        scanFunction(connection.Function, signal:GetFullName())
+-- If nothing works, fallback: search upvalues of functions for a Chunker-like table
+print("\n--- Scanning upvalues of functions for embedded Chunker instance ---")
+local foundViaUpvalues = false
+for _, fn in ipairs(getgc(true)) do
+    if type(fn) == "function" then
+        for i = 1, 50 do
+            local name, val = pcall(function() return debug.getupvalue(fn, i) end)
+            if name and type(val) == "table" then
+                if rawget(val, "_chunkSize") and type(rawget(val, "Update")) == "function" and rawget(val, "RenderDistance") ~= nil then
+                    print("✅ Found embedded Chunker via upvalue in function:", fn)
+                    print("   chunkSize=", val._chunkSize, "RenderDistance=", val.RenderDistance)
+                    foundViaUpvalues = true
+                    break
+                end
+            end
+        end
     end
 end
-
-if not found then
-    print("Scan complete. No direct reference was found. The controller script is exceptionally well hidden.")
+if not foundViaUpvalues then
+    print("No embedded Chunker found in upvalues scan.")
 end
