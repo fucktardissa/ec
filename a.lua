@@ -1,4 +1,4 @@
--- Master Auto-Farm & Hatching Script (v5 - Simplrfartified)
+-- Master Auto-Farm & Hatching Script (v6 - Bug Fix)
 
 --[[
     ============================================================
@@ -8,17 +8,14 @@
 local Config = {
     AutoFarm = true,
 
-    -- Set the minimum amount for each currency.
     MIN_FESTIVAL_COINS = "30m",
-    MIN_TICKETS = "1000000b",
+    MIN_TICKETS = "1223232323b",
     MIN_GEMS = "1m",
     MIN_COINS = "10b",
 
-    -- ## Optional Multitasking Actions ##
     HatchEggWhileFarmingFestivalCoins = true,
     HatchEggWhileFarmingGemsAndCoins = true,
     HatchEggWhileFarmingTickets = true,
-    -- ## UPDATED ##: Simplified to a single toggle for Hyper Darts.
     PlayHyperDartsWhileFarmingTickets = true,
 }
 getgenv().Config = Config
@@ -84,7 +81,6 @@ local function collectNearbyPickups()
     end
 end
 
--- ## UPDATED ##: Simplified to one specific minigame function.
 local function playHyperDarts()
     RemoteEvent:FireServer("SkipMinigameCooldown", "Hyper Darts")
     RemoteEvent:FireServer("StartMinigame", "Hyper Darts", "Insane")
@@ -116,7 +112,7 @@ while getgenv().Config.AutoFarm do
         print("Task: Farming Festival Coins.")
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn")
         task.wait(3)
-        tweenTo(workspace.Worlds["The Overworld"].Egg.Position)
+        tweenTo(workspace.Worlds["The Overworld"].Egg.PrimaryPart.Position)
         local mainCondition = function() return getgenv().Config.AutoFarm and getCurrency("FestivalCoins") < minFestival end
         task.spawn(function()
             while mainCondition() do collectNearbyPickups() task.wait(5) end
@@ -133,17 +129,26 @@ while getgenv().Config.AutoFarm do
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn")
         task.wait(3)
         local mainCondition = function() return getgenv().Config.AutoFarm and getCurrency("Tickets") < minTickets end
+
         if getgenv().Config.HatchEggWhileFarmingTickets then
-            tweenTo(workspace.Worlds["Minigame Paradise"].Islands["Hyperwave Island"].Island.Egg.Position)
-            task.spawn(function()
-                while mainCondition() do openRegularEgg() end
-            end)
+            -- ## THIS IS THE CORRECTED PART ##
+            local eggModel = workspace.Worlds["Minigame Paradise"].Islands["Hyperwave Island"].Island:FindFirstChild("Egg")
+            if eggModel and eggModel.PrimaryPart then
+                tweenTo(eggModel.PrimaryPart.Position)
+                task.spawn(function()
+                    while mainCondition() do openRegularEgg() end
+                end)
+            else
+                warn("Could not find Neon Egg to tween to. Skipping hatching.")
+            end
         end
+
         if getgenv().Config.PlayHyperDartsWhileFarmingTickets then
             task.spawn(function()
                 while mainCondition() do playHyperDarts() task.wait(2) end
             end)
         end
+        
         while mainCondition() do
             collectNearbyPickups()
             task.wait(5)
@@ -155,7 +160,7 @@ while getgenv().Config.AutoFarm do
         task.wait(3)
         local mainCondition = function() return getgenv().Config.AutoFarm and (getCurrency("Gems") < minGems or getCurrency("Coins") < minCoins) end
         if getgenv().Config.HatchEggWhileFarmingGemsAndCoins then
-            tweenTo(workspace.Worlds["The Overworld"].Islands.Zen.Island.EggPlatformSpawn.Position)
+            tweenTo(workspace.Worlds["The Overworld"].Islands.Zen.Island.EggPlatformSpawn.PrimaryPart.Position)
             task.spawn(function()
                 while mainCondition() do openRegularEgg() end
             end)
