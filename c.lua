@@ -23,7 +23,7 @@ getgenv().Config = Config -- Make it accessible globally to stop it
 -- Hardcoded Settings
 local ITEM_LOAD_DELAY = 2.0
 local GRAB_DELAY = 0.5
-local CYCLE_DELAY = 7.0 -- Changed to 7 seconds as requested
+local CYCLE_DELAY = 4.0 -- Changed to 7 seconds as requested
 
 -- Get necessary services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
