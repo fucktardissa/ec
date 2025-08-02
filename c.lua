@@ -1,4 +1,4 @@
--- Combined Minigame Automator & Transition Skipper (v2)
+-- Combined Minigame Automator & Transition Skipper (v3 - Persistent Grab)
 
 --[[
     ============================================================
@@ -11,8 +11,6 @@ local Config = {
     UnlockInsaneMode = true,
     TargetDifficulty = "Insane",
 
-    -- If true, uses the instant FinishMinigame remote.
-    -- If false, uses the precision mode to grab every item.
     QUICK_MINIGAME_FINISH = false
 }
 getgenv().Config = Config -- Make it accessible globally to stop it
@@ -25,8 +23,8 @@ getgenv().Config = Config -- Make it accessible globally to stop it
 
 -- Hardcoded Settings
 local ITEM_LOAD_DELAY = 2.0
-local GRAB_DELAY = 0.2
-local CYCLE_DELAY = 3.0
+local GRAB_DELAY = 0.5 -- A slightly longer delay to respect server cooldowns
+local CYCLE_DELAY = 5.0 -- A longer delay to let the game fully reset
 
 -- Get necessary services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -61,28 +59,37 @@ if not success then
     warn("An error occurred while setting up the transition skipper:", errorMessage)
 end
 
--- ## Helper function for Precision Mode ##
+-- ## UPDATED HELPER FUNCTION ##
+-- This function now loops until all items are gone.
 local function grabAllClawItems()
     print("Scanning for claw items...")
-    local itemsFound = 0
-    for _, child in ipairs(ScreenGui:GetChildren()) do
-        local itemId = child.Name:match("^ClawItem(.+)")
-        if itemId then
-            itemsFound = itemsFound + 1
-            print("  > Found item, grabbing ID: " .. itemId)
-            RemoteEvent:FireServer("GrabMinigameItem", itemId) --
-            task.wait(GRAB_DELAY)
+    
+    local itemsStillExist = true
+    while itemsStillExist do
+        local itemsFoundThisPass = 0
+        
+        for _, child in ipairs(ScreenGui:GetChildren()) do
+            local itemId = child.Name:match("^ClawItem(.+)")
+            if itemId then
+                itemsFoundThisPass = itemsFoundThisPass + 1
+                print("  > Found item, attempting to grab ID: " .. itemId)
+                RemoteEvent:FireServer("GrabMinigameItem", itemId)
+                task.wait(GRAB_DELAY) -- Wait for the cooldown
+            end
+        end
+        
+        -- If we scan the entire GUI and find no items, the minigame is over.
+        if itemsFoundThisPass == 0 then
+            itemsStillExist = false
         end
     end
-    print("Grabbed " .. itemsFound .. " items. Finishing minigame...")
-    -- Fire the finish remote after grabbing all items
-    RemoteEvent:FireServer("FinishMinigame") --
+    
+    print("All items grabbed. Minigame should end automatically.")
 end
 
 -- ## Part 2: Minigame Automation Logic ##
 print("Starting Minigame Automator (Dual Mode). To stop, run: getgenv().Config.AutoMinigame = false")
 while getgenv().Config.AutoMinigame do
-    -- Unlock sequence always uses the fast finish method
     if getgenv().Config.UnlockInsaneMode then
         print("--- Starting Insane Mode Unlock Sequence for: " .. getgenv().Config.MinigameToPlay .. " ---")
         local difficultiesToUnlock = {"Easy", "Medium", "Hard"}
@@ -98,13 +105,11 @@ while getgenv().Config.AutoMinigame do
         getgenv().Config.UnlockInsaneMode = false
     end
 
-    -- Main farming loop
     print("--- Starting new cycle on " .. getgenv().Config.TargetDifficulty .. " ---")
     RemoteEvent:FireServer("SkipMinigameCooldown", getgenv().Config.MinigameToPlay)
     task.wait(0.1)
     RemoteEvent:FireServer("StartMinigame", getgenv().Config.MinigameToPlay, getgenv().Config.TargetDifficulty)
     
-    -- Decide which method to use based on the config
     if getgenv().Config.QUICK_MINIGAME_FINISH then
         print("Quick Finish mode enabled.")
         task.wait(0.5)
