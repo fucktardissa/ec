@@ -1,4 +1,4 @@
--- Combined Minigame Automator & Transition Skipper (Debug Version)
+-- Combined Minigame Automator & Transition Skipper (v4 - Timings Fix)
 
 --[[
     ============================================================
@@ -23,7 +23,7 @@ getgenv().Config = Config -- Make it accessible globally to stop it
 -- Hardcoded Settings
 local ITEM_LOAD_DELAY = 2.0
 local GRAB_DELAY = 0.5
-local CYCLE_DELAY = 65.0 -- Set to 65 seconds to account for the 1-minute server cooldown
+local CYCLE_DELAY = 4.0 -- Changed to 4 seconds as requested
 
 -- Get necessary services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -87,13 +87,18 @@ while getgenv().Config.AutoMinigame do
         for _, difficulty in ipairs(difficultiesToUnlock) do
             if not getgenv().Config.AutoMinigame then break end
             print("  [Debug] Unlocking on difficulty: " .. difficulty)
-            print("    > Firing SkipMinigameCooldown...")
+            
             RemoteEvent:FireServer("SkipMinigameCooldown", getgenv().Config.MinigameToPlay)
-            print("    > Firing StartMinigame...")
             RemoteEvent:FireServer("StartMinigame", getgenv().Config.MinigameToPlay, difficulty)
-            print("    > Firing FinishMinigame...")
+            
+            -- ## NEW DELAY ##
+            -- Wait for the minigame to load before finishing.
+            print("    > Waiting 3 seconds for minigame to load...")
+            task.wait(3)
+            
             RemoteEvent:FireServer("FinishMinigame")
-            print("    > Waiting for server cooldown (" .. CYCLE_DELAY .. " seconds)...")
+            
+            print("    > Waiting for cycle cooldown (" .. CYCLE_DELAY .. " seconds)...")
             task.wait(CYCLE_DELAY)
         end
         print("--- Insane Mode Unlock Sequence Complete! ---")
@@ -101,20 +106,16 @@ while getgenv().Config.AutoMinigame do
     end
 
     print("--- Starting new farm cycle on " .. getgenv().Config.TargetDifficulty .. " ---")
-    print("  [Debug] Firing SkipMinigameCooldown...")
     RemoteEvent:FireServer("SkipMinigameCooldown", getgenv().Config.MinigameToPlay)
     task.wait(0.1)
-    print("  [Debug] Firing StartMinigame...")
     RemoteEvent:FireServer("StartMinigame", getgenv().Config.MinigameToPlay, getgenv().Config.TargetDifficulty)
     
     if getgenv().Config.QUICK_MINIGAME_FINISH then
         print("  [Debug] Quick Finish mode enabled.")
         task.wait(0.5)
-        print("  [Debug] Firing FinishMinigame...")
         RemoteEvent:FireServer("FinishMinigame")
     else
         print("  [Debug] Precision Grab mode enabled.")
-        print("  [Debug] Waiting for items to load...")
         task.wait(ITEM_LOAD_DELAY)
         grabAllClawItems()
     end
