@@ -1,4 +1,4 @@
--- Combined Minigame Automator & Transition Skipper (v3 - Persistent Grab) fart
+-- Combined Minigame Automator & Transition Skipper (Debug Version)
 
 --[[
     ============================================================
@@ -10,7 +10,6 @@ local Config = {
     MinigameToPlay = "Robot Claw",
     UnlockInsaneMode = true,
     TargetDifficulty = "Insane",
-
     QUICK_MINIGAME_FINISH = false
 }
 getgenv().Config = Config -- Make it accessible globally to stop it
@@ -23,8 +22,8 @@ getgenv().Config = Config -- Make it accessible globally to stop it
 
 -- Hardcoded Settings
 local ITEM_LOAD_DELAY = 2.0
-local GRAB_DELAY = 0.5 -- A slightly longer delay to respect server cooldowns
-local CYCLE_DELAY = 1.0 -- A longer delay to let the game fully reset
+local GRAB_DELAY = 0.5
+local CYCLE_DELAY = 65.0 -- Set to 65 seconds to account for the 1-minute server cooldown
 
 -- Get necessary services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -42,9 +41,7 @@ local success, errorMessage = pcall(function()
         if hookfunction then
             local originalTransitionFunc = require(playTransitionModule)
             local function skipTransition(text, callback, icon)
-                if typeof(callback) == "function" then
-                    task.spawn(callback)
-                end
+                if typeof(callback) == "function" then task.spawn(callback) end
             end
             hookfunction(originalTransitionFunc, skipTransition)
             print("Successfully hooked PlayTransition. Transitions will be skipped.")
@@ -59,68 +56,70 @@ if not success then
     warn("An error occurred while setting up the transition skipper:", errorMessage)
 end
 
--- ## UPDATED HELPER FUNCTION ##
--- This function now loops until all items are gone.
+-- ## Helper function for Precision Mode ##
 local function grabAllClawItems()
-    print("Scanning for claw items...")
-    
+    print("  [Debug] Now scanning for claw items...")
     local itemsStillExist = true
     while itemsStillExist do
         local itemsFoundThisPass = 0
-        
         for _, child in ipairs(ScreenGui:GetChildren()) do
             local itemId = child.Name:match("^ClawItem(.+)")
             if itemId then
                 itemsFoundThisPass = itemsFoundThisPass + 1
-                print("  > Found item, attempting to grab ID: " .. itemId)
+                print("    > Found and grabbing item ID: " .. itemId)
                 RemoteEvent:FireServer("GrabMinigameItem", itemId)
-                task.wait(GRAB_DELAY) -- Wait for the cooldown
+                task.wait(GRAB_DELAY)
             end
         end
-        
-        -- If we scan the entire GUI and find no items, the minigame is over.
         if itemsFoundThisPass == 0 then
             itemsStillExist = false
         end
     end
-    
-    print("All items grabbed. Minigame should end automatically.")
+    print("  [Debug] All items grabbed. Game should end automatically.")
 end
 
 -- ## Part 2: Minigame Automation Logic ##
-print("Starting Minigame Automator (Dual Mode). To stop, run: getgenv().Config.AutoMinigame = false")
+print("Starting Minigame Automator. To stop, run: getgenv().Config.AutoMinigame = false")
 while getgenv().Config.AutoMinigame do
     if getgenv().Config.UnlockInsaneMode then
         print("--- Starting Insane Mode Unlock Sequence for: " .. getgenv().Config.MinigameToPlay .. " ---")
         local difficultiesToUnlock = {"Easy", "Medium", "Hard"}
         for _, difficulty in ipairs(difficultiesToUnlock) do
             if not getgenv().Config.AutoMinigame then break end
-            print("Unlocking on difficulty: " .. difficulty)
+            print("  [Debug] Unlocking on difficulty: " .. difficulty)
+            print("    > Firing SkipMinigameCooldown...")
             RemoteEvent:FireServer("SkipMinigameCooldown", getgenv().Config.MinigameToPlay)
+            print("    > Firing StartMinigame...")
             RemoteEvent:FireServer("StartMinigame", getgenv().Config.MinigameToPlay, difficulty)
+            print("    > Firing FinishMinigame...")
             RemoteEvent:FireServer("FinishMinigame")
+            print("    > Waiting for server cooldown (" .. CYCLE_DELAY .. " seconds)...")
             task.wait(CYCLE_DELAY)
         end
         print("--- Insane Mode Unlock Sequence Complete! ---")
         getgenv().Config.UnlockInsaneMode = false
     end
 
-    print("--- Starting new cycle on " .. getgenv().Config.TargetDifficulty .. " ---")
+    print("--- Starting new farm cycle on " .. getgenv().Config.TargetDifficulty .. " ---")
+    print("  [Debug] Firing SkipMinigameCooldown...")
     RemoteEvent:FireServer("SkipMinigameCooldown", getgenv().Config.MinigameToPlay)
     task.wait(0.1)
+    print("  [Debug] Firing StartMinigame...")
     RemoteEvent:FireServer("StartMinigame", getgenv().Config.MinigameToPlay, getgenv().Config.TargetDifficulty)
     
     if getgenv().Config.QUICK_MINIGAME_FINISH then
-        print("Quick Finish mode enabled.")
+        print("  [Debug] Quick Finish mode enabled.")
         task.wait(0.5)
+        print("  [Debug] Firing FinishMinigame...")
         RemoteEvent:FireServer("FinishMinigame")
     else
-        print("Precision Grab mode enabled.")
+        print("  [Debug] Precision Grab mode enabled.")
+        print("  [Debug] Waiting for items to load...")
         task.wait(ITEM_LOAD_DELAY)
         grabAllClawItems()
     end
     
-    print("Cycle complete. Waiting " .. CYCLE_DELAY .. "s...")
+    print("  [Debug] Cycle complete. Waiting for server cooldown (" .. CYCLE_DELAY .. "s)...")
     task.wait(CYCLE_DELAY)
 end
 
