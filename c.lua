@@ -1,4 +1,4 @@
--- Combined Minigame Automator & Transition Skipper (v4 - Timings Fix)
+-- Combined Minigame Automator & Transition Skipper (v5 - Final Fix)
 
 --[[
     ============================================================
@@ -23,7 +23,7 @@ getgenv().Config = Config -- Make it accessible globally to stop it
 -- Hardcoded Settings
 local ITEM_LOAD_DELAY = 2.0
 local GRAB_DELAY = 0.5
-local CYCLE_DELAY = 4.0 -- Changed to 4 seconds as requested
+local CYCLE_DELAY = 7.0 -- Changed to 7 seconds as requested
 
 -- Get necessary services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -56,11 +56,12 @@ if not success then
     warn("An error occurred while setting up the transition skipper:", errorMessage)
 end
 
--- ## Helper function for Precision Mode ##
+-- ## CORRECTED HELPER FUNCTION ##
+-- This function now loops until all items are gone to handle server cooldowns.
 local function grabAllClawItems()
     print("  [Debug] Now scanning for claw items...")
     local itemsStillExist = true
-    while itemsStillExist do
+    while itemsStillExist and getgenv().Config.AutoMinigame do
         local itemsFoundThisPass = 0
         for _, child in ipairs(ScreenGui:GetChildren()) do
             local itemId = child.Name:match("^ClawItem(.+)")
@@ -71,6 +72,7 @@ local function grabAllClawItems()
                 task.wait(GRAB_DELAY)
             end
         end
+        
         if itemsFoundThisPass == 0 then
             itemsStillExist = false
         end
@@ -87,12 +89,9 @@ while getgenv().Config.AutoMinigame do
         for _, difficulty in ipairs(difficultiesToUnlock) do
             if not getgenv().Config.AutoMinigame then break end
             print("  [Debug] Unlocking on difficulty: " .. difficulty)
-            
             RemoteEvent:FireServer("SkipMinigameCooldown", getgenv().Config.MinigameToPlay)
             RemoteEvent:FireServer("StartMinigame", getgenv().Config.MinigameToPlay, difficulty)
             
-            -- ## NEW DELAY ##
-            -- Wait for the minigame to load before finishing.
             print("    > Waiting 3 seconds for minigame to load...")
             task.wait(3)
             
