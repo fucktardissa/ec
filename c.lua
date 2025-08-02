@@ -1,4 +1,4 @@
--- Auto Claw Minigame Script (Ultimate Dual-Mode)asdasdfafsasfgfgsa
+-- Auto Claw Minigame Script (Ultimate Dual-Mode)asdyrshdeardyshsdryhzrdyrsduyrtsedusrtueszexudrtusertasdfafsasfgfgsa
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -132,6 +132,7 @@ Tabs.Main:AddToggle("AutoToggle", {
     Title = "Enable Automation",
     Description = "Starts the automated sequence",
     Default = Settings.Enabled,
+    Tooltip = "Automatically collects claw items", -- Add the tooltip here
     Callback = function(value)
         Settings.Enabled = value
         if value then
@@ -155,7 +156,7 @@ Tabs.Main:AddToggle("AutoToggle", {
             })
         end
     end
-}):AddTooltip("Automatically collects claw items")
+}) -- Notice the removed :AddTooltip from the end
 
 -- Mode Configuration
 Tabs.Main:AddToggle("MethodToggle", {
