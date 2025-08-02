@@ -1,4 +1,4 @@
--- Auto Claw Minigame Script (Ultimate Dual-Mode)
+-- Auto Claw Minigame Script (Ultimate Dual-Mode)asdasdfafsasfgfgsa
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -28,7 +28,7 @@ local Settings = {
 }
 
 -- Remote Setup
-local remote = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("Event")
+local remote = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("RemoteEvent")
 
 -- Enhanced Detection System
 local function findClawItems()
