@@ -1,10 +1,13 @@
--- Combined Transition Skipper & No Camera Move Patcher
+-- Combined Transition Skipper & No Camera Move Patcher (Corrected)213132213123123132213231
 
 print("--- Applying Game Patches ---")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+
+local transitionPatched = false
+local cameraPatched = false
 
 -- Check for hookfunction support first
 if not hookfunction then
@@ -24,6 +27,7 @@ if playTransitionModule then
     end
     hookfunction(originalTransitionFunc, skipTransition)
     print(" > Successfully patched PlayTransition.")
+    transitionPatched = true
 else
     warn(" > Could not find PlayTransition module.")
 end
@@ -31,7 +35,9 @@ end
 
 -- ## Part 2: Patch the Robot Claw Camera ##
 print("Attempting to patch Robot Claw camera...")
-local robotClawModule = ReplicatedStorage:FindFirstChild("Robot Claw", true)
+-- Use the exact path you discovered to find the module.
+local robotClawModule = ReplicatedStorage:FindFirstChild("Client"):FindFirstChild("Gui"):FindFirstChild("Frames"):FindFirstChild("Minigames"):FindFirstChild("Robot Claw")
+
 if robotClawModule and robotClawModule:IsA("ModuleScript") then
     local originalRunFunction = require(robotClawModule)
     local function runWithoutCameraMove(...)
@@ -46,29 +52,16 @@ if robotClawModule and robotClawModule:IsA("ModuleScript") then
     end
     hookfunction(originalRunFunction, runWithoutCameraMove)
     print(" > Successfully patched Robot Claw camera.")
+    cameraPatched = true
 else
-    -- Fallback search for the nested module
-    local minigamesFolder = ReplicatedStorage.Assets:FindFirstChild("Minigames")
-    local robotClawFolder = minigamesFolder and minigamesFolder:FindFirstChild("Robot Claw")
-    local nestedModule = robotClawFolder and robotClawFolder:FindFirstChildOfClass("ModuleScript")
-    
-    if nestedModule then
-         local originalRunFunction = require(nestedModule)
-         local function runWithoutCameraMove(...)
-            local cleanupFunc, stateChangedFunc = originalRunFunction(...)
-            local character = LocalPlayer.Character
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-                workspace.CurrentCamera.CameraSubject = humanoid
-            end
-            return cleanupFunc, stateChangedFunc
-        end
-        hookfunction(originalRunFunction, runWithoutCameraMove)
-        print(" > Successfully patched Robot Claw camera (found in Assets).")
-    else
-         warn(" > Could not find the Robot Claw module to patch.")
-    end
+    warn(" > Could not find the Robot Claw module to patch at the expected path.")
 end
 
-print("--- All patches have been applied. ---")
+
+-- ## Final Status Report ##
+print("--- Patching process finished. ---")
+if transitionPatched and cameraPatched then
+    print("Status: All patches were applied successfully.")
+else
+    print("Status: One or more patches FAILED. Check warnings above.")
+end
