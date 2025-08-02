@@ -1,4 +1,4 @@
--- Auto Claw Minigame Script (Ultimate Dual-Mode)asdyrshdeardyshsdryhzrdyrsduyrtsedusrtueszexudrtusertasdfafsasfgfgsa
+-- Auto Claw Minigame Script (Ultimate Dual-Mode)\]\
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -187,7 +187,7 @@ Tabs.Settings:AddSlider("CooldownSlider", {
     Title = "Cycle Cooldown",
     Description = "Delay between attempts (seconds)",
     Default = Settings.Cooldown,
-    Min = 5,
+    Min = 0,
     Max = 120,
     Rounding = 0,
     Callback = function(value)
