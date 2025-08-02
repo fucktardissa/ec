@@ -1,4 +1,4 @@
--- Combined Minigame Automator & Transition Skipper (v6 - Conditional Delay)
+-- Combined Minigame Automator & Transition Skipper (v6 - Cofartfartnditional Delay)
 
 --[[
     ============================================================
@@ -8,9 +8,9 @@
 local Config = {
     AutoMinigame = true,
     MinigameToPlay = "Robot Claw",
-    UnlockInsaneMode = true,
+    UnlockInsaneMode = false,
     TargetDifficulty = "Insane",
-    QUICK_MINIGAME_FINISH = false
+    QUICK_MINIGAME_FINISH = true
 }
 getgenv().Config = Config -- Make it accessible globally to stop it
 
