@@ -1,4 +1,4 @@
--- Combined Minigame Automator & Transition Skipper (v3 - Persistent Grab)
+-- Combined Minigame Automator & Transition Skipper (v3 - Persistent Grab) fart
 
 --[[
     ============================================================
@@ -24,7 +24,7 @@ getgenv().Config = Config -- Make it accessible globally to stop it
 -- Hardcoded Settings
 local ITEM_LOAD_DELAY = 2.0
 local GRAB_DELAY = 0.5 -- A slightly longer delay to respect server cooldowns
-local CYCLE_DELAY = 5.0 -- A longer delay to let the game fully reset
+local CYCLE_DELAY = 1.0 -- A longer delay to let the game fully reset
 
 -- Get necessary services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
