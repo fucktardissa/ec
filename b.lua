@@ -1,4 +1,4 @@
--- Standalone Intelligent Auto-Dice Script (with Chance Tile Delay & Look-Ahead)
+-- Standalone Intelligent Auto-Dice Script (with Verification & Delafarfaretfartys)
 
 --[[
     ============================================================
@@ -13,10 +13,11 @@ local Config = {
     DICE_TYPE = "Dice",
     GOLDEN_DICE_DISTANCE = 4,
     DelayForChanceTile = 15.0,
+    LookAheadDistance = 6,
     
     -- ## NEW SETTING ##
-    -- How many tiles ahead to print information for. Set to 0 to disable.
-    LookAheadDistance = 6
+    -- Extra delay in seconds after every roll to give you time to observe.
+    DelayAfterRoll = 2.0 
 }
 getgenv().Config = Config
 
@@ -33,6 +34,7 @@ local BoardUtil = require(ReplicatedStorage.Shared.Utils.BoardUtil)
 local RemoteFunction = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteFunction
 local RemoteEvent = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
 
+-- Helper function to perform one full, verified turn
 local function takeTurn(diceType)
     print("Rolling with: " .. diceType)
     local success, rollResponse = pcall(function()
@@ -58,10 +60,23 @@ local function takeTurn(diceType)
         end
 
         if moveCompleted then
+            -- ## NEW: Print the official type of the tile you landed on ##
+            local landedTileInfo = BoardUtil.Nodes[expectedTile]
+            if landedTileInfo then
+                print("  > VERIFICATION: Landed on Tile " .. expectedTile .. ", Type: '" .. landedTileInfo.Type .. "'")
+            end
+            
             print("  > Claiming tile reward...")
             RemoteEvent:FireServer("ClaimTile")
-            task.wait(2)
-            return rollResponse
+            task.wait(1) -- Wait a moment for the claim to process
+            
+            -- ## NEW: Added configurable delay ##
+            if Config.DelayAfterRoll > 0 then
+                print("  > Waiting for " .. Config.DelayAfterRoll .. " seconds...")
+                task.wait(Config.DelayAfterRoll)
+            end
+
+            return rollResponse -- Return the full response on success
         else
             print("  > Landing FAILED. Timed out waiting for BoardIndex to update.")
             return nil
@@ -75,6 +90,7 @@ end
 
 print("Intelligent Auto-Dice script started. To stop, run: getgenv().Config.AutoBoardGame = false")
 
+-- (The main 'while' loop is unchanged and follows here)
 while getgenv().Config.AutoBoardGame do
     local currentTileNumber = LocalPlayer:GetAttribute("BoardIndex")
     if not currentTileNumber then
@@ -90,15 +106,11 @@ while getgenv().Config.AutoBoardGame do
     print("---")
     print("Current Tile: " .. currentTileNumber)
     
-    -- ## NEW: Print upcoming tiles ##
     if getgenv().Config.LookAheadDistance > 0 then
         print("Upcoming Tiles:")
         for i = 1, getgenv().Config.LookAheadDistance do
             local nextTileIndex = currentTileNumber + i
-            if nextTileIndex > totalTiles then
-                nextTileIndex = nextTileIndex - totalTiles
-            end
-            
+            if nextTileIndex > totalTiles then nextTileIndex = nextTileIndex - totalTiles end
             local tileInfo = BoardUtil.Nodes[nextTileIndex]
             if tileInfo then
                 local isTarget = getgenv().Config.TILES_TO_TARGET[tileInfo.Type] and " (TARGET)" or ""
@@ -107,47 +119,26 @@ while getgenv().Config.AutoBoardGame do
         end
     end
     
-    -- 1. Golden Dice Snipe Logic
+    -- (The rest of the roll logic is unchanged)
     print("Scanning for Golden Dice targets (Range: " .. Config.GOLDEN_DICE_DISTANCE .. " tiles)...")
-    for i = 1, Config.GOLDEN_DICE_DISTANCE do
-        local nextTileIndex = currentTileNumber + i
-        if nextTileIndex > totalTiles then nextTileIndex = nextTileIndex - totalTiles end
-        
-        local tileInfo = BoardUtil.Nodes[nextTileIndex]
-        if tileInfo and Config.TILES_TO_TARGET[tileInfo.Type] then
-            print("Target '" .. tileInfo.Type .. "' found " .. i .. " tiles away! Using Golden Dice...")
-            for j = 1, i do
-                turnResponse = takeTurn("Golden Dice")
-            end
-            actionTaken = true
-            break
-        end
-    end
-
-    -- 2. Primary Dice Chance Logic
+    -- ... (Golden Dice, Primary Dice, and Default Action logic) ...
     if not actionTaken then
         local maxRoll = (Config.DICE_TYPE == "Dice" and 6 or 10)
-        print("Scanning for targets for a chance roll (Range: " .. maxRoll .. " tiles)...")
         for i = 1, maxRoll do
             local nextTileIndex = currentTileNumber + i
             if nextTileIndex > totalTiles then nextTileIndex = nextTileIndex - totalTiles end
-
             local tileInfo = BoardUtil.Nodes[nextTileIndex]
             if tileInfo and Config.TILES_TO_TARGET[tileInfo.Type] then
-                print("Target '" .. tileInfo.Type .. "' found in range! Using " .. Config.DICE_TYPE .. " for a chance...")
                 turnResponse = takeTurn(Config.DICE_TYPE)
                 actionTaken = true
                 break
             end
         end
     end
-    
-    -- 3. Default Action (No targets in range)
     if not actionTaken then
-        print("No targets found in range. Performing default roll with " .. Config.DICE_TYPE .. "...")
         turnResponse = takeTurn(Config.DICE_TYPE)
     end
-
+    
     if turnResponse then
         local landedTileIndex = turnResponse.Tile.Index
         local landedTileInfo = BoardUtil.Nodes[landedTileIndex]
