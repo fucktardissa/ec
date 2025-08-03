@@ -1,4 +1,4 @@
--- Advanced Auto-Delete & Shiny Script (with Tiers & Fixes)
+-- Advanced Auto-Delete & Shiny Scriptmymymymym serverence my serveracccee (with Tiers & Fixes)
 
 --[[
     ============================================================
@@ -12,9 +12,8 @@ local Config = {
     RARITY_TO_DELETE = {"Common", "Unique", "Rare"},
     DELETE_LEGENDARY_SHINY = false,
     DELETE_LEGENDARY_MYTHIC = false,
-    -- Maximum legendary tier to delete. If set to 2, it will delete Tier 1 and Tier 2 legendaries.
     MAX_LEGENDARY_TIER_TO_DELETE = 2,
-    CheckInterval = 1.0 -- Reduced interval for faster checking
+    CheckInterval = 1.0
 }
 getgenv().Config = Config
 
@@ -43,11 +42,10 @@ local function getPetTier(petName)
     if T2[petName] then return 2 end
     if T3[petName] then return 3 end
     
-    return 0 -- Not a tiered legendary
+    return 0
 end
 
 local function isInventoryFull()
-    -- NOTE: This can break if the game updates its UI.
     local storageLabel = PlayerGui.ScreenGui.Inventory.Frame.Top.StorageHolder.Storage
     if not storageLabel then return false end
     
@@ -67,7 +65,6 @@ local function getPetCountsAndInstances()
         if not petGroups[petInstance.Name] then
             petGroups[petInstance.Name] = {Count = 0, Instances = {}}
         end
-        -- ## FIX 1: Correctly count stacked pets ##
         petGroups[petInstance.Name].Count = petGroups[petInstance.Name].Count + (petInstance.Amount or 1)
         table.insert(petGroups[petInstance.Name].Instances, petInstance)
     end
@@ -82,34 +79,30 @@ local shinyRequirements = {
 print("Advanced Pet Manager started. To stop, run: getgenv().Config.AutoManagePets = false")
 
 while getgenv().Config.AutoManagePets do
-    if isInventoryFull() then
-        print("Inventory is full. Starting pet management...")
-        
-        -- Priority 1: Try to make a shiny pet
-        local petGroups = getPetCountsAndInstances()
-        local shinyCrafted = false
-        for petName, groupData in pairs(petGroups) do
-            local petBaseData = PetDatabase[petName]
-            if petBaseData and petBaseData.Rarity then
-                local rarity = petBaseData.Rarity
-                local requiredAmount = shinyRequirements[rarity]
-                if requiredAmount and table.find(getgenv().Config.RARITY_TO_SHINY, rarity) and groupData.Count >= requiredAmount then
-                    print("Found " .. groupData.Count .. "/" .. requiredAmount .. " of '" .. petName .. "'. Crafting shiny...")
-                    RemoteEvent:FireServer("MakePetShiny", groupData.Instances[1].Id)
-                    shinyCrafted = true
-                    task.wait(1) -- Wait a moment for the craft to process
-                    break -- Stop after crafting one shiny
-                end
+    -- ## ACTION 1: ALWAYS CHECK FOR SHINY CRAFTING ##
+    local petGroups = getPetCountsAndInstances()
+    for petName, groupData in pairs(petGroups) do
+        local petBaseData = PetDatabase[petName]
+        if petBaseData and petBaseData.Rarity then
+            local rarity = petBaseData.Rarity
+            local requiredAmount = shinyRequirements[rarity]
+            if requiredAmount and table.find(getgenv().Config.RARITY_TO_SHINY, rarity) and groupData.Count >= requiredAmount then
+                print("Found " .. groupData.Count .. "/" .. requiredAmount .. " of '" .. petName .. "'. Crafting shiny...")
+                RemoteEvent:FireServer("MakePetShiny", groupData.Instances[1].Id)
+                task.wait(1) -- Wait a moment for the craft to process
+                break -- Craft one shiny per cycle to avoid spamming
             end
         end
+    end
 
-        -- Priority 2: If no shiny was made, proceed to deletion
-        if not shinyCrafted then
-            print("No shinies could be crafted. Deleting unwanted pets...")
-            local playerData = LocalData:Get()
-            if not playerData or not playerData.Pets then continue end
-
+    -- ## ACTION 2: ONLY DELETE PETS WHEN INVENTORY IS FULL ##
+    if isInventoryFull() then
+        print("Inventory is full. Checking for pets to delete...")
+        local playerData = LocalData:Get()
+        
+        if playerData and playerData.Pets then
             local petsToDelete = {}
+            -- Build a list of all pets that match the deletion criteria
             for _, petInstance in pairs(playerData.Pets) do
                 if not petInstance.Equipped then
                     local petBaseData = PetDatabase[petInstance.Name]
@@ -136,17 +129,17 @@ while getgenv().Config.AutoManagePets do
                 end
             end
             
-            -- ## FIX 2: Delete multiple pets in one cycle ##
+            -- Delete the collected pets
             if #petsToDelete > 0 then
                 print("Found " .. #petsToDelete .. " pets to delete.")
                 for _, pet in pairs(petsToDelete) do
                     if not isInventoryFull() then 
                         print("Inventory has space. Stopping deletion cycle.")
-                        break -- Stop if inventory is no longer full
+                        break
                     end
                     print("Deleting '" .. pet.Name .. "' (Rarity: " .. (PetDatabase[pet.Name] and PetDatabase[pet.Name].Rarity or "Unknown") .. ")")
                     RemoteEvent:FireServer("DeletePet", pet.Id, 1, false)
-                    task.wait(0.2) -- Small delay between deletions to avoid network spam
+                    task.wait(0.2)
                 end
             else
                 warn("Inventory is full, but no pets matched the deletion rules.")
