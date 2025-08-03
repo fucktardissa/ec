@@ -10,7 +10,7 @@ local Config = {
     AutoRedeemCodes = true,
     
     -- Delay in seconds between redeeming each code to prevent network spam.
-    RedeemDelay = 1.0
+    RedeemDelay = 0.1
 }
 getgenv().Config = Config
 
