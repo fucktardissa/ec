@@ -7,8 +7,10 @@
 ]]
 local Config = {
     AutoRiftHatch = true,
+    -- This list is case-insensitive.
     RIFT_EGGS = {"Neon-Egg", "mining-egg", "cyber-egg"},
     MIN_RIFT_MULTIPLIER = 5,
+    -- This list is case-sensitive.
     HATCH_1X_EGG = {"Spikey-Egg"},
     FallbackHatchDuration = 10.0
 }
@@ -25,6 +27,7 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService") -- Added for camera control
 local LocalPlayer = Players.LocalPlayer
 local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("RemoteEvent")
 
@@ -53,7 +56,7 @@ local world2TeleportPoints = {
     {name = "Hyperwave Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn", height = 20010}
 }
 local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
-local VERTICAL_SPEED = 300 
+local VERTICAL_SPEED = 250 
 local HORIZONTAL_SPEED = 30 
 
 -- ## Helper Functions ##
@@ -100,36 +103,56 @@ local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     RemoteEvent:FireServer("Teleport", closestPoint.path)
 end
 
-local function performMovement(targetPosition) 
-    local character = LocalPlayer.Character 
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid") 
-    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart") 
-    if not (humanoid and humanoidRootPart) then 
-        warn("Movement failed: Character parts not found.")
-        return 
-    end 
+local function performMovement(targetPosition)
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+    local camera = workspace.CurrentCamera
+
+    if not (humanoid and humanoidRootPart and camera) then
+        warn("Movement failed: Character or Camera not found.")
+        return
+    end
+
+    local originalCameraType = camera.CameraType
+    local originalCameraSubject = camera.CameraSubject
+    camera.CameraType = Enum.CameraType.Scriptable
+
+    local cameraConnection = RunService.RenderStepped:Connect(function()
+        local lookVector = humanoidRootPart.CFrame.LookVector
+        local cameraOffset = Vector3.new(0, 10, 25)
+        local cameraPosition = humanoidRootPart.Position - (lookVector * 15) + cameraOffset
+        camera.CFrame = CFrame.lookAt(cameraPosition, humanoidRootPart.Position)
+    end)
+
+    local originalCollisions = {}
+    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end
     
-    local originalCollisions = {} 
-    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end 
+    local originalPlatformStand = humanoid.PlatformStand
+    humanoid.PlatformStand = true
     
-    local originalPlatformStand = humanoid.PlatformStand 
-    humanoid.PlatformStand = true 
+    local startPos = humanoidRootPart.Position
+    local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z)
     
-    local startPos = humanoidRootPart.Position 
-    local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z) 
-    local verticalTime = (startPos - intermediatePos.Position).Magnitude / VERTICAL_SPEED 
-    local verticalTween = TweenService:Create(humanoidRootPart, TweenInfo.new(verticalTime, Enum.EasingStyle.Linear), {CFrame = intermediatePos}) 
-    verticalTween:Play() 
-    verticalTween.Completed:Wait() 
+    local verticalTime = math.clamp((startPos - intermediatePos.Position).Magnitude / VERTICAL_SPEED, 0.5, 5)
+    local verticalTweenInfo = TweenInfo.new(verticalTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    local verticalTween = TweenService:Create(humanoidRootPart, verticalTweenInfo, {CFrame = intermediatePos})
+    verticalTween:Play()
+    verticalTween.Completed:Wait()
     
-    local horizontalTime = (humanoidRootPart.Position - targetPosition).Magnitude / HORIZONTAL_SPEED 
-    local horizontalTween = TweenService:Create(humanoidRootPart, TweenInfo.new(horizontalTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPosition)}) 
-    horizontalTween:Play() 
-    horizontalTween.Completed:Wait() 
+    local horizontalTime = math.clamp((humanoidRootPart.Position - targetPosition).Magnitude / HORIZONTAL_SPEED, 0.5, 10)
+    local horizontalTweenInfo = TweenInfo.new(horizontalTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    local horizontalTween = TweenService:Create(humanoidRootPart, horizontalTweenInfo, {CFrame = CFrame.new(targetPosition)})
+    horizontalTween:Play()
+    horizontalTween.Completed:Wait()
     
-    humanoidRootPart.Velocity = Vector3.new(0, 0, 0) 
-    humanoid.PlatformStand = originalPlatformStand 
-    for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end 
+    cameraConnection:Disconnect()
+    camera.CameraType = originalCameraType
+    camera.CameraSubject = originalCameraSubject
+    
+    humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+    humanoid.PlatformStand = originalPlatformStand
+    for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end
 end
 
 local function openRift()
@@ -143,7 +166,7 @@ local function tweenToEgg(position)
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 40
+    local time = dist / 150
     local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
     tween:Play()
     tween.Completed:Wait()
