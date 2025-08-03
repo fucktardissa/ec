@@ -1,4 +1,4 @@
--- Advanced Auto-Delete & Shiny Scriptmymymymym serverence my serveracccee (with Tiers & Fixes)
+-- Advanced Auto-Delete & Shiny Script (v3)
 
 --[[
     ============================================================
@@ -56,17 +56,21 @@ local function isInventoryFull()
     return tonumber(current) >= tonumber(max)
 end
 
+-- ## THE FIX IS IN THIS FUNCTION ##
 local function getPetCountsAndInstances()
     local playerData = LocalData:Get()
     if not (playerData and playerData.Pets) then return {} end
     
     local petGroups = {}
     for _, petInstance in pairs(playerData.Pets) do
-        if not petGroups[petInstance.Name] then
-            petGroups[petInstance.Name] = {Count = 0, Instances = {}}
+        -- Only count pets for crafting if they are NOT shiny
+        if not petInstance.Shiny then
+            if not petGroups[petInstance.Name] then
+                petGroups[petInstance.Name] = {Count = 0, Instances = {}}
+            end
+            petGroups[petInstance.Name].Count = petGroups[petInstance.Name].Count + (petInstance.Amount or 1)
+            table.insert(petGroups[petInstance.Name].Instances, petInstance)
         end
-        petGroups[petInstance.Name].Count = petGroups[petInstance.Name].Count + (petInstance.Amount or 1)
-        table.insert(petGroups[petInstance.Name].Instances, petInstance)
     end
     return petGroups
 end
@@ -87,10 +91,10 @@ while getgenv().Config.AutoManagePets do
             local rarity = petBaseData.Rarity
             local requiredAmount = shinyRequirements[rarity]
             if requiredAmount and table.find(getgenv().Config.RARITY_TO_SHINY, rarity) and groupData.Count >= requiredAmount then
-                print("Found " .. groupData.Count .. "/" .. requiredAmount .. " of '" .. petName .. "'. Crafting shiny...")
+                print("Found " .. groupData.Count .. "/" .. requiredAmount .. " of normal '" .. petName .. "'. Crafting shiny...")
                 RemoteEvent:FireServer("MakePetShiny", groupData.Instances[1].Id)
-                task.wait(1) -- Wait a moment for the craft to process
-                break -- Craft one shiny per cycle to avoid spamming
+                task.wait(1)
+                break
             end
         end
     end
@@ -102,7 +106,6 @@ while getgenv().Config.AutoManagePets do
         
         if playerData and playerData.Pets then
             local petsToDelete = {}
-            -- Build a list of all pets that match the deletion criteria
             for _, petInstance in pairs(playerData.Pets) do
                 if not petInstance.Equipped then
                     local petBaseData = PetDatabase[petInstance.Name]
@@ -116,7 +119,7 @@ while getgenv().Config.AutoManagePets do
                             local petTier = getPetTier(petInstance.Name)
                             if petInstance.Shiny and getgenv().Config.DELETE_LEGENDARY_SHINY then shouldDelete = true
                             elseif petInstance.Mythic and getgenv().Config.DELETE_LEGENDARY_MYTHIC then shouldDelete = true
-                            elseif petTier > 0 and petTier <= getgenv().Config.MAX_LEGENDARY_TIER_TO_DELETE then shouldDelete = true
+                            elseif petTier > 0 and petTier <= getgenv().Config.MAX_LEGENDARY_TIER_TO_DELETE and not petInstance.Shiny and not petInstance.Mythic then shouldDelete = true
                             end
                         elseif table.find(getgenv().Config.RARITY_TO_DELETE, rarity) then
                             shouldDelete = true
@@ -129,7 +132,6 @@ while getgenv().Config.AutoManagePets do
                 end
             end
             
-            -- Delete the collected pets
             if #petsToDelete > 0 then
                 print("Found " .. #petsToDelete .. " pets to delete.")
                 for _, pet in pairs(petsToDelete) do
@@ -137,7 +139,7 @@ while getgenv().Config.AutoManagePets do
                         print("Inventory has space. Stopping deletion cycle.")
                         break
                     end
-                    print("Deleting '" .. pet.Name .. "' (Rarity: " .. (PetDatabase[pet.Name] and PetDatabase[pet.Name].Rarity or "Unknown") .. ")")
+                    print("Deleting '" .. pet.Name .. "' (Shiny: " .. tostring(pet.Shiny or false) .. ")")
                     RemoteEvent:FireServer("DeletePet", pet.Id, 1, false)
                     task.wait(0.2)
                 end
