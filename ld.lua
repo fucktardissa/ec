@@ -1,4 +1,4 @@
--- Advanced Auto-Delete & Shiny Script (v8 - Always Active)
+-- Advanced Auto-Delete & Shiny Script (v9 - In-Game Auto-Delete Sync)
 
 --[[
     ============================================================
@@ -7,31 +7,52 @@
 ]]
 local Config = {
     AutoManagePets = true,
-    Debug = true, -- SET TO TRUE to see detailed deletion logic in the console
-    MAKE_MYTHICS_SHINY = true,
-    RARITY_TO_SHINY = {"Common", "Unique", "Rare", "Epic", "Legendary"},
-    PETS_TO_DELETE = {},
-    RARITY_TO_DELETE = {"Common", "Unique", "Rare"},
+    TOGGLE_GAME_AUTODELETE = false, -- Syncs RARITY_TO_DELETE with the in-game feature.
+    MAKE_MYTHICS_SHINY = true,     -- Automatically crafts shiny mythics.
+    RARITY_TO_DELETE = {},
+    PETS_TO_DELETE = {"Doggy"},
     DELETE_LEGENDARY_SHINY = false,
     DELETE_LEGENDARY_MYTHIC = false,
     MAX_LEGENDARY_TIER_TO_DELETE = 2,
-    CheckInterval = 2.0 -- Increased interval slightly since it's always running
+    CheckInterval = 2.0 -- How often the main loop runs
 }
 getgenv().Config = Config
 
 --[[
     ============================================================
-    -- CORE SCRIPT (No need to edit below this line)
+    -- DIAGNOSTICS & CORE SCRIPT
     ============================================================
 ]]
+print("--- Pet Manager v9: Running Diagnostics ---")
 
--- ## Services & Modules ##
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local RemoteEvent = ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
-local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
-local PetDatabase = require(ReplicatedStorage.Shared.Data.Pets)
+
+-- ## Check 1: Core Modules ##
+local LocalData_path = ReplicatedStorage:FindFirstChild("Client", true) and ReplicatedStorage.Client.Framework.Services.LocalData
+local PetDatabase_path = ReplicatedStorage:FindFirstChild("Shared", true) and ReplicatedStorage.Shared.Data.Pets
+local RemoteEvent_path = ReplicatedStorage:FindFirstChild("Shared", true) and ReplicatedStorage.Shared.Framework.Network.Remote.RemoteEvent
+
+local LocalData = LocalData_path and require(LocalData_path)
+local PetDatabase = PetDatabase_path and require(PetDatabase_path)
+local RemoteEvent = RemoteEvent_path
+
+if not LocalData then
+    error("SCRIPT ERROR: Could not find the 'LocalData' module. The game has likely updated. Script stopped.")
+    return
+end
+if not PetDatabase then
+    error("SCRIPT ERROR: Could not find the 'PetDatabase' module. The game has likely updated. Script stopped.")
+    return
+end
+if not RemoteEvent then
+    error("SCRIPT ERROR: Could not find the 'RemoteEvent'. The game has likely updated. Script stopped.")
+    return
+end
+
+print("SUCCESS: All modules and remotes found.")
+print("-----------------------------------------")
 
 -- ## Pre-processing Config for Case-Insensitivity ##
 local RARITY_TO_DELETE_LOWER = {}
@@ -88,16 +109,64 @@ end
 
 local shinyRequirements = {["Common"] = 16, ["Unique"] = 16, ["Rare"] = 12, ["Epic"] = 12, ["Legendary"] = 10}
 
-print("Advanced Pet Manager (v8 - Always Active) started.")
+-- ## ONE-TIME SYNC WITH IN-GAME AUTO-DELETE ##
+local function SyncGameAutoDelete()
+    if not getgenv().Config.TOGGLE_GAME_AUTODELETE then return end
+    
+    print("Syncing RARITY_TO_DELETE with in-game auto-delete settings...")
+    local gameAutoDeleteSettings = LocalData:Get().AutoDelete or {}
+    local petsToggled = 0
 
+    for petName, petData in pairs(PetDatabase) do
+        if petData.Rarity then
+            local rarityLower = string.lower(petData.Rarity)
+            if table.find(RARITY_TO_DELETE_LOWER, rarityLower) then
+                if not gameAutoDeleteSettings[petName] then
+                    print("Enabling in-game auto-delete for '" .. petName .. "'")
+                    RemoteEvent:FireServer("ToggleAutoDelete", petName)
+                    petsToggled = petsToggled + 1
+                    task.wait(0.25)
+                end
+            end
+        end
+    end
+    print("In-game auto-delete sync complete. Toggled " .. petsToggled .. " new pets.")
+end
+
+-- Run the sync once at the start
+SyncGameAutoDelete()
+
+print("Advanced Pet Manager (v9) started. Manual deletion is active.")
+
+-- ## Main Automation Loop ##
 while getgenv().Config.AutoManagePets do
     -- ## ACTION 1: SHINY CRAFTING ##
-    -- (This section remains unchanged and will always run)
-    -- ...
+    local normalPetGroups = getNormalPetCounts()
+    for petName, groupData in pairs(normalPetGroups) do
+        local petBaseData = PetDatabase[petName]
+        if petBaseData and petBaseData.Rarity then
+            if groupData.Count >= (shinyRequirements[petBaseData.Rarity] or 999) then
+                print("Found enough normal '" .. petName .. "' to craft shiny. Crafting...")
+                RemoteEvent:FireServer("MakePetShiny", groupData.Instances[1].Id)
+                task.wait(1)
+                break
+            end
+        end
+    end
+    
+    if getgenv().Config.MAKE_MYTHICS_SHINY then
+        local mythicPetGroups = getMythicPetCounts()
+        for petName, groupData in pairs(mythicPetGroups) do
+            if groupData.Count >= 10 then
+                print("Found enough mythic '" .. petName .. "' to craft shiny. Crafting...")
+                RemoteEvent:FireServer("MakePetShiny", groupData.Instances[1].Id)
+                task.wait(1)
+                break
+            end
+        end
+    end
 
-    -- ## ACTION 2: PET DELETION ##
-    -- The "if isInventoryFull()" check has been removed from this section.
-    print("Checking for pets to delete...")
+    -- ## ACTION 2: MANUAL PET DELETION (ALWAYS ACTIVE) ##
     local playerData = LocalData:Get()
     if playerData and playerData.Pets then
         local petsToDelete = {}
@@ -110,8 +179,7 @@ while getgenv().Config.AutoManagePets do
                     local petNameLower = string.lower(petInstance.Name)
                     local rarityLower = string.lower(petBaseData.Rarity)
 
-                    if table.find(PETS_TO_DELETE_LOWER, petNameLower) then
-                        shouldDelete = true
+                    if table.find(PETS_TO_DELETE_LOWER, petNameLower) then shouldDelete = true
                     elseif petBaseData.Rarity == "Legendary" then
                         local petTier = getPetTier(petInstance.Name)
                         if petInstance.Shiny and getgenv().Config.DELETE_LEGENDARY_SHINY then shouldDelete = true
@@ -127,15 +195,13 @@ while getgenv().Config.AutoManagePets do
         end
         
         if #petsToDelete > 0 then
-            print("Found " .. #petsToDelete .. " stacks of pets to delete.")
+            print("Manual Deletion: Found " .. #petsToDelete .. " stacks of pets to clear from inventory.")
             for _, pet in pairs(petsToDelete) do
                 local amountToDelete = pet.Amount or 1
                 print("Deleting " .. amountToDelete .. "x '" .. pet.Name .. "'")
                 RemoteEvent:FireServer("DeletePet", pet.Id, amountToDelete, false)
                 task.wait(0.3)
             end
-        else
-            print("No pets found that match deletion rules.")
         end
     end
     
