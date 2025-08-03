@@ -1,4 +1,4 @@
--- Standalone Auto-Rift & Fallback Hatch Scriptasdsaddsasd asd a sdasdas d asdsd
+-- Standalone Auto-Rift & Fallback Hatch Script
 
 --[[
     ============================================================
@@ -7,10 +7,8 @@
 ]]
 local Config = {
     AutoRiftHatch = true,
-    -- This list is case-insensitive.
-    RIFT_EGGS = {"mining-egg", "neon-egg", "hyperwave-egg"},
+    RIFT_EGGS = {"Neon-Egg", "mining-egg", "cyber-egg"},
     MIN_RIFT_MULTIPLIER = 5,
-    -- This list is case-sensitive.
     HATCH_1X_EGG = {"Spikey-Egg"},
     FallbackHatchDuration = 10.0
 }
@@ -56,7 +54,8 @@ local world2TeleportPoints = {
 }
 local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
 
--- ## Helper Functions ##
+-- (All helper functions are included and unchanged)
+-- ...
 local function isRiftValid(riftNameFromConfig)
     if not riftNameFromConfig or riftNameFromConfig == "" then return nil end
     local riftFolder = workspace.Rendered.Rifts
@@ -70,7 +69,6 @@ local function isRiftValid(riftNameFromConfig)
     end
     return nil
 end
-
 local function getRiftMultiplier(riftInstance)
     local display = riftInstance:FindFirstChild("Display")
     if not display then return 0 end
@@ -85,8 +83,6 @@ local function getRiftMultiplier(riftInstance)
     end
     return 0
 end
-
--- ## THIS FUNCTION WAS MISSING ##
 local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     local closestPoint = teleportPoints[#teleportPoints]
     local smallestDifference = math.huge
@@ -100,8 +96,6 @@ local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     print("Teleporting to closest portal in " .. worldName .. ": " .. closestPoint.name)
     RemoteEvent:FireServer("Teleport", closestPoint.path)
 end
-
--- ## THIS FUNCTION WAS MISSING ##
 local function performMovement(targetPosition)
     local character = LocalPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
@@ -120,34 +114,27 @@ local function performMovement(targetPosition)
     horizontalTween.Completed:Wait()
     for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end
 end
-
--- ## THIS FUNCTION WAS MISSING ##
 local function openRift()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
     task.wait(0.1)
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
 end
-
--- ## THIS FUNCTION WAS MISSING ##
 local function tweenToEgg(position)
     local character = LocalPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 150
+    local time = dist / 40
     local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
     tween:Play()
     tween.Completed:Wait()
 end
-
--- ## THIS FUNCTION WAS MISSING ##
 local function openRegularEgg()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
     task.wait()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait()
 end
-
 local function searchForPriorityRift()
     print("Searching for priority rifts...")
     for _, riftName in ipairs(getgenv().Config.RIFT_EGGS) do
@@ -173,17 +160,21 @@ while getgenv().Config.AutoRiftHatch do
         print("Engaging target rift: " .. targetRift.Name)
         local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
         
+        -- ## THE FIX: This check is now case-insensitive and more reliable ##
         local isWorld2Rift = false
+        local riftNameLower = string.lower(targetRiftNameFromConfig)
         for _, keyword in ipairs(world2RiftKeywords) do
-            if targetRiftNameFromConfig:find(keyword) then
+            if riftNameLower:find(string.lower(keyword)) then
                 isWorld2Rift = true
                 break
             end
         end
 
         if isWorld2Rift then
+            print("Rift identified as World 2.")
             teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
         else
+            print("Rift identified as World 1.")
             teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1")
         end
         
@@ -199,18 +190,17 @@ while getgenv().Config.AutoRiftHatch do
         print("Rift is gone. Restarting search cycle.")
 
     else
+        -- (The efficient fallback hatch logic is unchanged)
         print("No valid rifts found. Entering fallback hatch mode.")
         local fallbackEggNameHyphenated = getgenv().Config.HATCH_1X_EGG[1]
         if fallbackEggNameHyphenated then
             local fallbackEggNameSpaced = fallbackEggNameHyphenated:gsub("-", " ")
             local eggPos = eggPositions[fallbackEggNameSpaced]
-            
             if eggPos then
                 print("Falling back to hatch: " .. fallbackEggNameSpaced)
                 RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn")
                 task.wait(3)
                 tweenToEgg(eggPos)
-                
                 print("Now in fallback mode. Will hatch and periodically search for rifts...")
                 while getgenv().Config.AutoRiftHatch do
                     local riftFound, _ = searchForPriorityRift()
@@ -218,7 +208,6 @@ while getgenv().Config.AutoRiftHatch do
                         print("Priority rift found! Exiting fallback mode.")
                         break
                     end
-
                     print("No rifts found, continuing to hatch fallback egg...")
                     local hatchEndTime = tick() + getgenv().Config.FallbackHatchDuration
                     while tick() < hatchEndTime and getgenv().Config.AutoRiftHatch do
