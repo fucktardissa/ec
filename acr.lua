@@ -1,4 +1,4 @@
--- Master Auto-Farm & Multitasking Script
+-- Master Auto-Farm & Multitasking Scriptdhshsdgsdhsdh
 
 --[[
     ============================================================
@@ -60,7 +60,7 @@ local function tweenTo(position)
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 150
+    local time = dist / 40
     local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
     tween:Play()
     tween.Completed:Wait()
