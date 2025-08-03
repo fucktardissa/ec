@@ -53,9 +53,10 @@ local world2TeleportPoints = {
     {name = "Hyperwave Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn", height = 20010}
 }
 local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
+local VERTICAL_SPEED = 300 
+local HORIZONTAL_SPEED = 30 
 
--- (All helper functions are included and unchanged)
--- ...
+-- ## Helper Functions ##
 local function isRiftValid(riftNameFromConfig)
     if not riftNameFromConfig or riftNameFromConfig == "" then return nil end
     local riftFolder = workspace.Rendered.Rifts
@@ -69,6 +70,7 @@ local function isRiftValid(riftNameFromConfig)
     end
     return nil
 end
+
 local function getRiftMultiplier(riftInstance)
     local display = riftInstance:FindFirstChild("Display")
     if not display then return 0 end
@@ -83,6 +85,7 @@ local function getRiftMultiplier(riftInstance)
     end
     return 0
 end
+
 local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     local closestPoint = teleportPoints[#teleportPoints]
     local smallestDifference = math.huge
@@ -96,29 +99,45 @@ local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     print("Teleporting to closest portal in " .. worldName .. ": " .. closestPoint.name)
     RemoteEvent:FireServer("Teleport", closestPoint.path)
 end
-local function performMovement(targetPosition)
-    local character = LocalPlayer.Character
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return end
-    local originalCollisions = {}
-    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end
-    local startPos = rootPart.Position
-    local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z)
-    local verticalTime = (startPos - intermediatePos.Position).Magnitude / 300
-    local verticalTween = TweenService:Create(rootPart, TweenInfo.new(verticalTime, Enum.EasingStyle.Linear), {CFrame = intermediatePos})
-    verticalTween:Play()
-    verticalTween.Completed:Wait()
-    local horizontalTime = (rootPart.Position - targetPosition).Magnitude / 30
-    local horizontalTween = TweenService:Create(rootPart, TweenInfo.new(horizontalTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPosition)})
-    horizontalTween:Play()
-    horizontalTween.Completed:Wait()
-    for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end
+
+local function performMovement(targetPosition) 
+    local character = LocalPlayer.Character 
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid") 
+    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart") 
+    if not (humanoid and humanoidRootPart) then 
+        warn("Movement failed: Character parts not found.")
+        return 
+    end 
+    
+    local originalCollisions = {} 
+    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end 
+    
+    local originalPlatformStand = humanoid.PlatformStand 
+    humanoid.PlatformStand = true 
+    
+    local startPos = humanoidRootPart.Position 
+    local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z) 
+    local verticalTime = (startPos - intermediatePos.Position).Magnitude / VERTICAL_SPEED 
+    local verticalTween = TweenService:Create(humanoidRootPart, TweenInfo.new(verticalTime, Enum.EasingStyle.Linear), {CFrame = intermediatePos}) 
+    verticalTween:Play() 
+    verticalTween.Completed:Wait() 
+    
+    local horizontalTime = (humanoidRootPart.Position - targetPosition).Magnitude / HORIZONTAL_SPEED 
+    local horizontalTween = TweenService:Create(humanoidRootPart, TweenInfo.new(horizontalTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPosition)}) 
+    horizontalTween:Play() 
+    horizontalTween.Completed:Wait() 
+    
+    humanoidRootPart.Velocity = Vector3.new(0, 0, 0) 
+    humanoid.PlatformStand = originalPlatformStand 
+    for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end 
 end
+
 local function openRift()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
     task.wait(0.1)
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
 end
+
 local function tweenToEgg(position)
     local character = LocalPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
@@ -129,12 +148,14 @@ local function tweenToEgg(position)
     tween:Play()
     tween.Completed:Wait()
 end
+
 local function openRegularEgg()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
     task.wait()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait()
 end
+
 local function searchForPriorityRift()
     print("Searching for priority rifts...")
     for _, riftName in ipairs(getgenv().Config.RIFT_EGGS) do
@@ -160,7 +181,6 @@ while getgenv().Config.AutoRiftHatch do
         print("Engaging target rift: " .. targetRift.Name)
         local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
         
-        -- ## THE FIX: This check is now case-insensitive and more reliable ##
         local isWorld2Rift = false
         local riftNameLower = string.lower(targetRiftNameFromConfig)
         for _, keyword in ipairs(world2RiftKeywords) do
@@ -190,17 +210,18 @@ while getgenv().Config.AutoRiftHatch do
         print("Rift is gone. Restarting search cycle.")
 
     else
-        -- (The efficient fallback hatch logic is unchanged)
         print("No valid rifts found. Entering fallback hatch mode.")
         local fallbackEggNameHyphenated = getgenv().Config.HATCH_1X_EGG[1]
         if fallbackEggNameHyphenated then
             local fallbackEggNameSpaced = fallbackEggNameHyphenated:gsub("-", " ")
             local eggPos = eggPositions[fallbackEggNameSpaced]
+            
             if eggPos then
                 print("Falling back to hatch: " .. fallbackEggNameSpaced)
                 RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn")
                 task.wait(3)
                 tweenToEgg(eggPos)
+                
                 print("Now in fallback mode. Will hatch and periodically search for rifts...")
                 while getgenv().Config.AutoRiftHatch do
                     local riftFound, _ = searchForPriorityRift()
@@ -208,6 +229,7 @@ while getgenv().Config.AutoRiftHatch do
                         print("Priority rift found! Exiting fallback mode.")
                         break
                     end
+
                     print("No rifts found, continuing to hatch fallback egg...")
                     local hatchEndTime = tick() + getgenv().Config.FallbackHatchDuration
                     while tick() < hatchEndTime and getgenv().Config.AutoRiftHatch do
