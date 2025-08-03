@@ -7,15 +7,9 @@
 ]]
 local Config = {
     AutoRiftHatch = true,
-
-    -- Use the "Name-Egg" format for rifts.
-    RIFT_EGGS = {"mining-egg"},
-    
+    RIFT_EGGS = {"Neon-Egg", "Spikey-Egg", "mining-egg"},
     MIN_RIFT_MULTIPLIER = 5,
-    
-    -- Also use the "Name-Egg" format here for consistency.
     HATCH_1X_EGG = {"Spikey-Egg"},
-    
     FallbackHatchDuration = 15.0
 }
 getgenv().Config = Config
@@ -72,12 +66,21 @@ local function isRiftValid(riftName)
     return nil
 end
 
+-- ## THE FIX IS IN THIS FUNCTION ##
 local function getRiftMultiplier(riftInstance)
     local display = riftInstance:FindFirstChild("Display")
-    local gui = display and display:FindFirstChild("SurfaceGui")
-    local multiplierLabel = gui and gui:FindFirstChild("Multiplier")
-    if multiplierLabel and multiplierLabel:IsA("TextLabel") then
-        local num = tonumber(string.match(multiplierLabel.Text, "%d+"))
+    if not display then return 0 end
+    
+    local gui = display:FindFirstChild("SurfaceGui")
+    if not gui then return 0 end
+    
+    local icon = gui:FindFirstChild("Icon")
+    if not icon then return 0 end
+
+    -- Uses the correct path you provided
+    local luckLabel = icon:FindFirstChild("Luck") 
+    if luckLabel and luckLabel:IsA("TextLabel") then
+        local num = tonumber(string.match(luckLabel.Text, "%d+"))
         return num or 0
     end
     return 0
@@ -127,7 +130,7 @@ local function tweenToEgg(position)
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 150
+    local time = dist / 40
     local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
     tween:Play()
     tween.Completed:Wait()
