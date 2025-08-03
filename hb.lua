@@ -9,7 +9,7 @@ local Config = {
     AutoRiftHatch = true,
 
     -- Use the "Name-Egg" format for rifts.
-    RIFT_EGGS = {"Mining-Egg"},
+    RIFT_EGGS = {"mining-egg"},
     
     MIN_RIFT_MULTIPLIER = 5,
     
