@@ -10,15 +10,14 @@ local Config = {
     RARITY_TO_DELETE = {"Common", "Unique", "Rare"},
     DELETE_LEGENDARY_SHINY = false,
     DELETE_LEGENDARY_MYTHIC = false,
-    -- Maximum legendary tier to delete. If set to 2, it will delete Tier 1 and Tier 2 legendaries.
     MAX_LEGENDARY_TIER_TO_DELETE = 2,
-    CheckInterval = 2.0 -- MODIFICATION: Shortened the interval for faster checks
+    CheckInterval = 2.0
 }
 getgenv().Config = Config
 
 --[[
     ============================================================
-    -- CORE SCRIPT (No need to edit below this line)
+    -- CORE SCRIPT (WITH DEBUGGING)
     ============================================================
 ]]
 
@@ -36,43 +35,42 @@ local function getPetTier(petName)
     local T1 = {["Emerald Golem"]=true, ["Inferno Dragon"]=true, ["Unicorn"]=true, ["Flying Pig"]=true, ["Lunar Serpent"]=true, ["Electra"]=true, ["Dark Serpent"]=true, ["Inferno Cube"]=true, ["Crystal Unicorn"]=true, ["Cyborg Phoenix"]=true, ["Neon Wyvern"]=true}
     local T2 = {["Neon Elemental"]=true, ["Green Hydra"]=true, ["Stone Gargoyle"]=true, ["Gummy Dragon"]=true}
     local T3 = {["NULLVoid"]=true, ["Virus"]=true, ["Demonic Hydra"]=true, ["Hexarium"]=true, ["Rainbow Shock"]=true, ["Space Invader"]=true, ["Bionic Shard"]=true, ["Neon Wire Eye"]=true, ["Equalizer"]=true, ["Candy Winged Hydra"]=true, ["Rock Candy Golem"]=true}
-
     if T1[petName] then return 1 end
     if T2[petName] then return 2 end
     if T3[petName] then return 3 end
-
-    return 0 -- Not a tiered legendary
+    return 0
 end
 
 local function isInventoryFull()
     local storageLabel = PlayerGui.ScreenGui.Inventory.Frame.Top.StorageHolder.Storage
     local text = storageLabel.Text
     local current, max = text:match("(%d+)/(%d+)")
+    if not (current and max) then return false end
     current, max = tonumber(current), tonumber(max)
-    return current and max and current >= max
+    local isFull = current and max and current >= max
+    print("DEBUG: Inventory check: " .. tostring(current) .. "/" .. tostring(max) .. ". Is full? " .. tostring(isFull))
+    return isFull
 end
 
 -- ## Main Automation Loop ##
-print("IMPROVED Advanced Pet Manager started. To stop, run: getgenv().Config.AutoManagePets = false")
+print("IMPROVED Pet Manager with DEBUGGING started. To stop, run: getgenv().Config.AutoManagePets = false")
 
 while getgenv().Config.AutoManagePets do
-    -- Only run the logic if the inventory is full
     if isInventoryFull() then
-        print("Inventory is full. Starting batch pet management...")
+        print("DEBUG: Inventory is full. Starting batch pet management...")
         local playerData = LocalData:Get()
         if not (playerData and playerData.Pets) then
+            warn("DEBUG: Player data or pets not found. Retrying...")
             task.wait(getgenv().Config.CheckInterval)
             continue
         end
 
-        --- MODIFICATION: The entire logic below is restructured for batch processing.
-
         -- Priority 1: Craft ALL possible shiny pets first.
-        -- We loop until no more shinies can be made in a pass.
+        print("DEBUG: Starting shiny crafting phase.")
         local shiniesCraftedInPass
         repeat
             shiniesCraftedInPass = false
-            local petGroups = {} -- Recalculate pet groups each time
+            local petGroups = {}
             for _, petInstance in pairs(playerData.Pets) do
                 if not petGroups[petInstance.Name] then
                     petGroups[petInstance.Name] = {Count = 0, Instances = {}}
@@ -86,90 +84,93 @@ while getgenv().Config.AutoManagePets do
                 if petBaseData and petBaseData.Rarity then
                     local rarity = petBaseData.Rarity
                     local requiredAmount = {["Common"] = 16, ["Unique"] = 16, ["Rare"] = 12, ["Epic"] = 12, ["Legendary"] = 10}[rarity]
-                    
+                    print("DEBUG: Checking shiny for '" .. petName .. "' (Rarity: " .. rarity .. "). Have: " .. groupData.Count .. ", Need: " .. (requiredAmount or "N/A"))
                     if requiredAmount and table.find(getgenv().Config.RARITY_TO_SHINY, rarity) and groupData.Count >= requiredAmount then
-                        print("Found " .. groupData.Count .. "/" .. requiredAmount .. " of '" .. petName .. "'. Crafting shiny...")
+                        print("DEBUG: CONDITION MET! Crafting shiny '" .. petName .. "'...")
                         RemoteEvent:FireServer("MakePetShiny", groupData.Instances[1].Id)
                         shiniesCraftedInPass = true
-                        task.wait(0.2) -- Small delay to prevent network spam
-                        -- NOTE: We DO NOT break here, allowing it to find other shinies to craft.
+                        task.wait(0.2)
                     end
                 end
             end
             if shiniesCraftedInPass then
-                task.wait(1) -- Wait for inventory to update after crafting pass
-                playerData = LocalData:Get() -- Re-fetch data
+                print("DEBUG: Completed a shiny crafting pass. Waiting for inventory to update...")
+                task.wait(1)
+                playerData = LocalData:Get()
             end
         until not shiniesCraftedInPass
+        print("DEBUG: Shiny crafting phase complete.")
 
         -- Priority 2: If inventory is STILL full, proceed with batch deletion.
+        print("DEBUG: Re-checking inventory before deletion phase.")
         while isInventoryFull() do
+            print("DEBUG: Inventory still full. Starting a deletion pass.")
             local petDeletedInPass = false
             local allPets = {}
             for _, p in pairs(playerData.Pets) do table.insert(allPets, p) end
 
-            if #allPets == 0 then break end -- Exit if no pets left to check
+            if #allPets == 0 then
+                print("DEBUG: No pets left to delete.")
+                break
+            end
 
             for i = #allPets, 1, -1 do
                 local petInstance = allPets[i]
                 local petBaseData = PetDatabase[petInstance.Name]
-                
-                -- Skip equipped pets
+                print("DEBUG: Evaluating pet for deletion: '" .. petInstance.Name .. "' (Equipped: " .. tostring(petInstance.Equipped) .. ")")
                 if petInstance.Equipped then continue end
                 
                 local shouldDelete = false
                 local deleteReason = ""
 
-                -- Check deletion conditions
                 if table.find(getgenv().Config.PETS_TO_DELETE, petInstance.Name) then
                     shouldDelete = true
-                    deleteReason = "name: " .. petInstance.Name
+                    deleteReason = "it is in PETS_TO_DELETE list"
                 elseif petBaseData and petBaseData.Rarity then
                     local rarity = petBaseData.Rarity
                     if rarity == "Legendary" then
                         if petInstance.Shiny and getgenv().Config.DELETE_LEGENDARY_SHINY then
                             shouldDelete = true
-                            deleteReason = "Legendary Shiny: " .. petInstance.Name
+                            deleteReason = "it is a Legendary Shiny"
                         elseif petInstance.Mythic and getgenv().Config.DELETE_LEGENDARY_MYTHIC then
                             shouldDelete = true
-                            deleteReason = "Legendary Mythic: " .. petInstance.Name
+                            deleteReason = "it is a Legendary Mythic"
                         else
                             local petTier = getPetTier(petInstance.Name)
                             if petTier > 0 and petTier <= getgenv().Config.MAX_LEGENDARY_TIER_TO_DELETE then
                                 shouldDelete = true
-                                deleteReason = "Legendary Tier " .. petTier .. " pet: " .. petInstance.Name
+                                deleteReason = "it is a Tier " .. petTier .. " Legendary"
                             end
                         end
                     elseif table.find(getgenv().Config.RARITY_TO_DELETE, rarity) then
                         shouldDelete = true
-                        deleteReason = "rarity '" .. rarity .. "': " .. petInstance.Name
+                        deleteReason = "its rarity (" .. rarity .. ") is in RARITY_TO_DELETE"
                     end
                 end
                 
-                -- If a reason to delete was found, fire the event
                 if shouldDelete then
-                    print("Deleting pet by " .. deleteReason)
+                    print("DEBUG: CONDITION MET! Deleting '" .. petInstance.Name .. "' because " .. deleteReason)
                     RemoteEvent:FireServer("DeletePet", petInstance.Id, 1, false)
                     petDeletedInPass = true
-                    table.remove(allPets, i) -- Remove from our local table to avoid re-checking
-                    task.wait(0.2) -- Small delay
-                    break -- MODIFICATION: Break from this inner loop to re-check if inventory is still full
+                    table.remove(allPets, i)
+                    task.wait(0.2)
+                    break 
                 end
             end
             
-            -- If we looped through all pets and couldn't delete anything, break the loop to avoid getting stuck
             if not petDeletedInPass then
-                warn("Inventory is full, but no deletable pets found based on current rules.")
+                warn("DEBUG: Could not find any pets to delete in this pass. Breaking deletion loop to prevent getting stuck.")
                 break
             end
             
-            task.wait(0.5) -- Wait for inventory to update
-            playerData = LocalData:Get() -- Re-fetch data
+            print("DEBUG: Deletion pass complete. Waiting for inventory to update.")
+            task.wait(0.5)
+            playerData = LocalData:Get()
         end
-        print("Pet management cycle complete.")
+        print("DEBUG: Pet management cycle complete.")
     end
     
     task.wait(getgenv().Config.CheckInterval)
 end
 
-print("IMPROVED Advanced Pet Manager has stopped.")
+print("IMPROVED Pet Manager with DEBUGGING has stopped.")
