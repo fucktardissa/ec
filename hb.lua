@@ -7,7 +7,7 @@
 ]]
 local Config = {
     AutoRiftHatch = true,
-    RIFT_EGGS = {"Neon-Egg", "mining-egg", "cyber-egg"},
+    RIFT_EGGS = {"fart-egg"},
     MIN_RIFT_MULTIPLIER = 5,
     HATCH_1X_EGG = {"Spikey-Egg"},
     FallbackHatchDuration = 10.0
