@@ -6,25 +6,19 @@
     ============================================================
 ]]
 local Config = {
-    -- Master toggle for the script.
     AutoRiftHatch = true,
 
-    -- A list of priority rift egg names to search for.
-    -- Example: RIFT_EGGS = {"festival-rift-3", "crystal-egg"}
-    RIFT_EGGS = {"neon-egg"},
-
-    -- The script will only engage a rift if its multiplier is this value or higher.
-    MIN_RIFT_MULTIPLIER = 5,
-
-    -- If no valid rifts are found, the script will hatch one of these regular eggs as a fallback.
-    -- The script will pick the first egg in this list.
-    -- Example: HATCH_1X_EGG = {"Common Egg", "Spotted Egg"}
-    HATCH_1X_EGG = {"neon-egg"},
+    -- Use the "Name-Egg" format for rifts.
+    RIFT_EGGS = {"Mining-Egg"},
     
-    -- How long (in seconds) to hatch the fallback egg before searching for rifts again.
+    MIN_RIFT_MULTIPLIER = 5,
+    
+    -- Also use the "Name-Egg" format here for consistency.
+    HATCH_1X_EGG = {"Spikey-Egg"},
+    
     FallbackHatchDuration = 15.0
 }
-getgenv().Config = Config -- Make it accessible globally to stop it
+getgenv().Config = Config
 
 --[[
     ============================================================
@@ -32,7 +26,7 @@ getgenv().Config = Config -- Make it accessible globally to stop it
     ============================================================
 ]]
 
--- ## Services & Player Info ##
+-- ## Services & Modules ##
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,9 +34,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("RemoteEvent")
 
--- ## Helper Functions from Provided Scripts ##
-
--- Egg positions for the fallback hatch
+-- ## Data for Teleporting & Locations ##
 local eggPositions = {
     ["Common Egg"] = Vector3.new(-83.86, 10.11, 1.57), ["Spotted Egg"] = Vector3.new(-93.96, 10.11, 7.41),
     ["Iceshard Egg"] = Vector3.new(-117.06, 10.11, 7.74), ["Spikey Egg"] = Vector3.new(-124.58, 10.11, 4.58),
@@ -54,7 +46,23 @@ local eggPositions = {
     ["Infinity Egg"] = Vector3.new(-99, 9, -26), ["Neon Egg"] = Vector3.new(-83, 10, -57)
 }
 
--- Checks if a rift exists in the workspace
+local world1TeleportPoints = {
+    {name = "Zen", path = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn", height = 15970},
+    {name = "The Void", path = "Workspace.Worlds.The Overworld.Islands.The Void.Island.Portal.Spawn", height = 10135},
+    {name = "Twilight", path = "Workspace.Worlds.The Overworld.Islands.Twilight.Island.Portal.Spawn", height = 6855},
+    {name = "Outer Space", path = "Workspace.Worlds.The Overworld.Islands.Outer Space.Island.Portal.Spawn", height = 2655}
+}
+
+local world2TeleportPoints = {
+    {name = "W2 Spawn", path = "Workspace.Worlds.Minigame Paradise.FastTravel.Spawn", height = 0},
+    {name = "Dice Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Dice Island.Island.Portal.Spawn", height = 2880},
+    {name = "Minecart Forest", path = "Workspace.Worlds.Minigame Paradise.Islands.Minecart Forest.Island.Portal.Spawn", height = 7660},
+    {name = "Robot Factory", path = "Workspace.Worlds.Minigame Paradise.Islands.Robot Factory.Island.Portal.Spawn", height = 13330},
+    {name = "Hyperwave Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn", height = 20010}
+}
+local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
+
+-- ## Helper Functions ##
 local function isRiftValid(riftName)
     if not riftName or riftName == "" then return nil end
     local rift = workspace.Rendered.Rifts:FindFirstChild(riftName)
@@ -64,27 +72,18 @@ local function isRiftValid(riftName)
     return nil
 end
 
--- IMPORTANT: This function assumes the multiplier is in a TextLabel named "Multiplier".
--- You may need to edit "Multiplier" to the correct name if this doesn't work.
 local function getRiftMultiplier(riftInstance)
     local display = riftInstance:FindFirstChild("Display")
     local gui = display and display:FindFirstChild("SurfaceGui")
-    local multiplierLabel = gui and gui:FindFirstChild("Multiplier") -- Assumed name
+    local multiplierLabel = gui and gui:FindFirstChild("Multiplier")
     if multiplierLabel and multiplierLabel:IsA("TextLabel") then
         local num = tonumber(string.match(multiplierLabel.Text, "%d+"))
         return num or 0
     end
-    return 0 -- Return 0 if not found
+    return 0
 end
 
--- Teleports to the closest portal to the target rift
-local function teleportToClosestPoint(targetHeight)
-    local teleportPoints = {
-        {name = "Zen", path = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn", height = 15970},
-        {name = "The Void", path = "Workspace.Worlds.The Overworld.Islands.The Void.Island.Portal.Spawn", height = 10135},
-        {name = "Twilight", path = "Workspace.Worlds.The Overworld.Islands.Twilight.Island.Portal.Spawn", height = 6855},
-        {name = "Outer Space", path = "Workspace.Worlds.The Overworld.Islands.Outer Space.Island.Portal.Spawn", height = 2655}
-    }
+local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     local closestPoint = teleportPoints[#teleportPoints]
     local smallestDifference = math.huge
     for _, point in ipairs(teleportPoints) do
@@ -94,55 +93,46 @@ local function teleportToClosestPoint(targetHeight)
             closestPoint = point
         end
     end
-    print("Teleporting to closest portal: " .. closestPoint.name)
+    print("Teleporting to closest portal in " .. worldName .. ": " .. closestPoint.name)
     RemoteEvent:FireServer("Teleport", closestPoint.path)
 end
 
--- Tweens the character to the final rift position
 local function performMovement(targetPosition)
     local character = LocalPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
-    
     local originalCollisions = {}
     for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end
-    
     local startPos = rootPart.Position
     local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z)
     local verticalTime = (startPos - intermediatePos.Position).Magnitude / 300
     local verticalTween = TweenService:Create(rootPart, TweenInfo.new(verticalTime, Enum.EasingStyle.Linear), {CFrame = intermediatePos})
     verticalTween:Play()
     verticalTween.Completed:Wait()
-    
     local horizontalTime = (rootPart.Position - targetPosition).Magnitude / 30
     local horizontalTween = TweenService:Create(rootPart, TweenInfo.new(horizontalTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPosition)})
     horizontalTween:Play()
     horizontalTween.Completed:Wait()
-
     for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end
 end
 
--- Simulates pressing the 'R' key to hatch a rift
 local function openRift()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
     task.wait(0.1)
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
 end
 
--- Tweens to a regular egg for the fallback
 local function tweenToEgg(position)
     local character = LocalPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
-
     local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 150 -- Fast speed
+    local time = dist / 150
     local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
     tween:Play()
     tween.Completed:Wait()
 end
 
--- Simulates pressing the 'E' key to hatch a regular egg
 local function openRegularEgg()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
     task.wait()
@@ -155,16 +145,7 @@ end
 print("Auto-Rift script started. To stop, run: getgenv().Config.AutoRiftHatch = false")
 
 while getgenv().Config.AutoRiftHatch do
-    local character = LocalPlayer.Character
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then
-        print("Waiting for character to load...")
-        task.wait(2)
-        continue
-    end
-
-    -- 1. Search for a valid priority rift
-    local targetRift = nil
+    local targetRift, targetRiftNameFromConfig = nil, nil
     print("Searching for priority rifts...")
     for _, riftName in ipairs(getgenv().Config.RIFT_EGGS) do
         local riftInstance = isRiftValid(riftName)
@@ -173,17 +154,31 @@ while getgenv().Config.AutoRiftHatch do
             print("Found rift '" .. riftName .. "' with multiplier x" .. multiplier)
             if multiplier >= getgenv().Config.MIN_RIFT_MULTIPLIER then
                 targetRift = riftInstance
-                break -- Found a valid rift, stop searching
+                targetRiftNameFromConfig = riftName
+                break
             end
         end
     end
 
-    -- 2. Engage the rift if one was found
     if targetRift then
         print("Engaging target rift: " .. targetRift.Name)
         local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
-        teleportToClosestPoint(targetPosition.Y)
-        task.wait(5) -- Wait for teleport to complete
+        
+        local isWorld2Rift = false
+        for _, keyword in ipairs(world2RiftKeywords) do
+            if targetRiftNameFromConfig:find(keyword) then
+                isWorld2Rift = true
+                break
+            end
+        end
+
+        if isWorld2Rift then
+            teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
+        else
+            teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1")
+        end
+        
+        task.wait(5)
         performMovement(targetPosition)
         task.wait(1)
         
@@ -194,14 +189,15 @@ while getgenv().Config.AutoRiftHatch do
         end
         print("Rift is gone. Restarting search cycle.")
 
-    -- 3. If no rift was found, perform the fallback action
     else
         print("No valid rifts found.")
-        local fallbackEggName = getgenv().Config.HATCH_1X_EGG[1]
-        if fallbackEggName then
-            local eggPos = eggPositions[fallbackEggName]
+        local fallbackEggNameHyphenated = getgenv().Config.HATCH_1X_EGG[1]
+        if fallbackEggNameHyphenated then
+            local fallbackEggNameSpaced = fallbackEggNameHyphenated:gsub("-", " ")
+            local eggPos = eggPositions[fallbackEggNameSpaced]
+            
             if eggPos then
-                print("Falling back to hatch: " .. fallbackEggName)
+                print("Falling back to hatch: " .. fallbackEggNameSpaced)
                 RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn")
                 task.wait(3)
                 tweenToEgg(eggPos)
@@ -212,14 +208,14 @@ while getgenv().Config.AutoRiftHatch do
                     openRegularEgg()
                 end
             else
-                print("Could not find position for fallback egg: " .. fallbackEggName)
+                print("Could not find position for fallback egg: " .. fallbackEggNameSpaced)
             end
         else
             print("No fallback egg configured. Waiting before next rift search.")
         end
     end
 
-    task.wait(5) -- Cooldown before the next full search cycle
+    task.wait(5)
 end
 
 print("Auto-Rift script has stopped.")
