@@ -12,9 +12,7 @@ local Config = {
     -- ## Enchant Targets - METHOD 1 (PRIORITY) ##
     -- If this list is NOT empty, the script will ONLY look for these enchants.
     -- Names must be exact, including the tier (e.g., "Team Up V").
-    TARGET_ENCHANTS = {
-        -- Example: "Team Up V", "Secret Hunter"
-    },
+    TARGET_ENCHANTS = {"Bubbler III"},
 
     -- ## Enchant Targets - METHOD 2 (FALLBACK) ##
     -- If the TARGET_ENCHANTS list above is empty, the script will use these settings.
