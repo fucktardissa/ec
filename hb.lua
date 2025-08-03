@@ -1,4 +1,4 @@
--- Standalone Auto-Rift & Fallback Hatch Script
+-- Standalone Auto-Rift & Fallback Hatch Script (with Redundancy)
 
 --[[
     ============================================================
@@ -27,7 +27,7 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local RunService = game:GetService("RunService") -- Added for camera control
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("RemoteEvent")
 
@@ -56,7 +56,7 @@ local world2TeleportPoints = {
     {name = "Hyperwave Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn", height = 20010}
 }
 local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
-local VERTICAL_SPEED = 250 
+local VERTICAL_SPEED = 300 
 local HORIZONTAL_SPEED = 30 
 
 -- ## Helper Functions ##
@@ -72,6 +72,19 @@ local function isRiftValid(riftNameFromConfig)
         end
     end
     return nil
+end
+
+local function isCorrectRiftStillValid(riftInstance)
+    return riftInstance and riftInstance.Parent == workspace.Rendered.Rifts
+end
+
+local function isPlayerNearRift(riftInstance, distance)
+    local character = LocalPlayer.Character
+    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart or not isCorrectRiftStillValid(riftInstance) then
+        return false
+    end
+    return (humanoidRootPart.Position - riftInstance.Display.Position).Magnitude < distance
 end
 
 local function getRiftMultiplier(riftInstance)
@@ -108,48 +121,38 @@ local function performMovement(targetPosition)
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
     local camera = workspace.CurrentCamera
-
     if not (humanoid and humanoidRootPart and camera) then
         warn("Movement failed: Character or Camera not found.")
         return
     end
-
     local originalCameraType = camera.CameraType
     local originalCameraSubject = camera.CameraSubject
     camera.CameraType = Enum.CameraType.Scriptable
-
     local cameraConnection = RunService.RenderStepped:Connect(function()
         local lookVector = humanoidRootPart.CFrame.LookVector
         local cameraOffset = Vector3.new(0, 10, 25)
         local cameraPosition = humanoidRootPart.Position - (lookVector * 15) + cameraOffset
         camera.CFrame = CFrame.lookAt(cameraPosition, humanoidRootPart.Position)
     end)
-
     local originalCollisions = {}
     for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end
-    
     local originalPlatformStand = humanoid.PlatformStand
     humanoid.PlatformStand = true
-    
     local startPos = humanoidRootPart.Position
     local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z)
-    
     local verticalTime = math.clamp((startPos - intermediatePos.Position).Magnitude / VERTICAL_SPEED, 0.5, 5)
     local verticalTweenInfo = TweenInfo.new(verticalTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
     local verticalTween = TweenService:Create(humanoidRootPart, verticalTweenInfo, {CFrame = intermediatePos})
     verticalTween:Play()
     verticalTween.Completed:Wait()
-    
     local horizontalTime = math.clamp((humanoidRootPart.Position - targetPosition).Magnitude / HORIZONTAL_SPEED, 0.5, 10)
     local horizontalTweenInfo = TweenInfo.new(horizontalTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
     local horizontalTween = TweenService:Create(humanoidRootPart, horizontalTweenInfo, {CFrame = CFrame.new(targetPosition)})
     horizontalTween:Play()
     horizontalTween.Completed:Wait()
-    
     cameraConnection:Disconnect()
     camera.CameraType = originalCameraType
     camera.CameraSubject = originalCameraSubject
-    
     humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
     humanoid.PlatformStand = originalPlatformStand
     for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end
@@ -202,35 +205,55 @@ while getgenv().Config.AutoRiftHatch do
 
     if targetRift then
         print("Engaging target rift: " .. targetRift.Name)
-        local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
         
-        local isWorld2Rift = false
-        local riftNameLower = string.lower(targetRiftNameFromConfig)
-        for _, keyword in ipairs(world2RiftKeywords) do
-            if riftNameLower:find(string.lower(keyword)) then
-                isWorld2Rift = true
-                break
+        local movementAttempts = 0
+        local maxAttempts = 3
+        local inPosition = false
+
+        while isCorrectRiftStillValid(targetRift) and movementAttempts < maxAttempts and not inPosition do
+            movementAttempts = movementAttempts + 1
+            print("Movement attempt " .. movementAttempts .. "/" .. maxAttempts .. "...")
+
+            local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
+            local isWorld2Rift = false
+            local riftNameLower = string.lower(targetRiftNameFromConfig)
+            for _, keyword in ipairs(world2RiftKeywords) do
+                if riftNameLower:find(string.lower(keyword)) then
+                    isWorld2Rift = true
+                    break
+                end
+            end
+
+            if isWorld2Rift then
+                print("Rift identified as World 2.")
+                teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
+            else
+                print("Rift identified as World 1.")
+                teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1")
+            end
+            
+            task.wait(5)
+            performMovement(targetPosition)
+            task.wait(1)
+
+            if isPlayerNearRift(targetRift, 15) then
+                print("Proximity check successful. In position.")
+                inPosition = true
+            else
+                warn("Proximity check failed. Retrying movement...")
             end
         end
 
-        if isWorld2Rift then
-            print("Rift identified as World 2.")
-            teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
+        if inPosition then
+            print("Hatching rift...")
+            while isCorrectRiftStillValid(targetRift) and getgenv().Config.AutoRiftHatch do
+                openRift()
+                task.wait(0.5)
+            end
+            print("Rift is gone. Restarting search cycle.")
         else
-            print("Rift identified as World 1.")
-            teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1")
+            warn("Failed to get near the rift after " .. maxAttempts .. " attempts. Restarting search cycle.")
         end
-        
-        task.wait(5)
-        performMovement(targetPosition)
-        task.wait(1)
-        
-        print("Hatching rift...")
-        while isRiftValid(targetRift.Name) and getgenv().Config.AutoRiftHatch do
-            openRift()
-            task.wait(0.5)
-        end
-        print("Rift is gone. Restarting search cycle.")
 
     else
         print("No valid rifts found. Entering fallback hatch mode.")
@@ -252,7 +275,6 @@ while getgenv().Config.AutoRiftHatch do
                         print("Priority rift found! Exiting fallback mode.")
                         break
                     end
-
                     print("No rifts found, continuing to hatch fallback egg...")
                     local hatchEndTime = tick() + getgenv().Config.FallbackHatchDuration
                     while tick() < hatchEndTime and getgenv().Config.AutoRiftHatch do
