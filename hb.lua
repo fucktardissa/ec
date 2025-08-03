@@ -1,4 +1,4 @@
--- Standalone Auto-Rift & Fallback Hatch Script (with Redundancy)
+-- Standalone Auto-Rift & Fallback Hatch Script
 
 --[[
     ============================================================
@@ -7,10 +7,8 @@
 ]]
 local Config = {
     AutoRiftHatch = true,
-    -- This list is case-insensitive.
     RIFT_EGGS = {"Neon-Egg", "mining-egg", "cyber-egg"},
     MIN_RIFT_MULTIPLIER = 5,
-    -- This list is case-sensitive.
     HATCH_1X_EGG = {"Spikey-Egg"},
     FallbackHatchDuration = 10.0
 }
@@ -31,7 +29,7 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("RemoteEvent")
 
--- ## Data for Teleporting & Locations ##
+-- ## Data & Constants ##
 local eggPositions = {
     ["Common Egg"] = Vector3.new(-83.86, 10.11, 1.57), ["Spotted Egg"] = Vector3.new(-93.96, 10.11, 7.41),
     ["Iceshard Egg"] = Vector3.new(-117.06, 10.11, 7.74), ["Spikey Egg"] = Vector3.new(-124.58, 10.11, 4.58),
@@ -164,17 +162,6 @@ local function openRift()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
 end
 
-local function tweenToEgg(position)
-    local character = LocalPlayer.Character
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return end
-    local dist = (rootPart.Position - position).Magnitude
-    local time = dist / 150
-    local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) })
-    tween:Play()
-    tween.Completed:Wait()
-end
-
 local function openRegularEgg()
     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
     task.wait()
@@ -205,15 +192,12 @@ while getgenv().Config.AutoRiftHatch do
 
     if targetRift then
         print("Engaging target rift: " .. targetRift.Name)
-        
         local movementAttempts = 0
         local maxAttempts = 3
         local inPosition = false
-
         while isCorrectRiftStillValid(targetRift) and movementAttempts < maxAttempts and not inPosition do
             movementAttempts = movementAttempts + 1
             print("Movement attempt " .. movementAttempts .. "/" .. maxAttempts .. "...")
-
             local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
             local isWorld2Rift = false
             local riftNameLower = string.lower(targetRiftNameFromConfig)
@@ -223,7 +207,6 @@ while getgenv().Config.AutoRiftHatch do
                     break
                 end
             end
-
             if isWorld2Rift then
                 print("Rift identified as World 2.")
                 teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
@@ -231,11 +214,9 @@ while getgenv().Config.AutoRiftHatch do
                 print("Rift identified as World 1.")
                 teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1")
             end
-            
             task.wait(5)
             performMovement(targetPosition)
             task.wait(1)
-
             if isPlayerNearRift(targetRift, 15) then
                 print("Proximity check successful. In position.")
                 inPosition = true
@@ -243,7 +224,6 @@ while getgenv().Config.AutoRiftHatch do
                 warn("Proximity check failed. Retrying movement...")
             end
         end
-
         if inPosition then
             print("Hatching rift...")
             while isCorrectRiftStillValid(targetRift) and getgenv().Config.AutoRiftHatch do
@@ -254,20 +234,18 @@ while getgenv().Config.AutoRiftHatch do
         else
             warn("Failed to get near the rift after " .. maxAttempts .. " attempts. Restarting search cycle.")
         end
-
     else
         print("No valid rifts found. Entering fallback hatch mode.")
         local fallbackEggNameHyphenated = getgenv().Config.HATCH_1X_EGG[1]
         if fallbackEggNameHyphenated then
             local fallbackEggNameSpaced = fallbackEggNameHyphenated:gsub("-", " ")
             local eggPos = eggPositions[fallbackEggNameSpaced]
-            
             if eggPos then
                 print("Falling back to hatch: " .. fallbackEggNameSpaced)
                 RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn")
                 task.wait(3)
-                tweenToEgg(eggPos)
-                
+                -- ## THE FIX: Using the main performMovement function for consistency ##
+                performMovement(eggPos)
                 print("Now in fallback mode. Will hatch and periodically search for rifts...")
                 while getgenv().Config.AutoRiftHatch do
                     local riftFound, _ = searchForPriorityRift()
