@@ -1,7 +1,5 @@
--- Standalone Auto Mystery Box Script (Continuous & Smart)fssaffassaffas
-
 --[[
-    ============================================================
+    ============================================================fartfartfartfart
     -- ## CONFIGURATION ##
     ============================================================
 ]]
@@ -15,6 +13,9 @@ local Config = {
         "Light Box",
         "Festival Mystery Box"
     },
+
+    -- The number of each box type to attempt to use (NOTE: This is no longer used for opening, but kept for other potential uses)
+    USE_QUANTITY = 100,
 
     -- How long to wait (in seconds) before re-checking when you have no boxes.
     IdleCheckInterval = 15.0
@@ -36,58 +37,60 @@ local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 task.spawn(function()
     print("--- Starting Auto Mystery Box script. ---")
     while getgenv().Config.AutoOpenAndClaimBoxes do
+        -- ## PRE-CHECK: See if we have any boxes to open ##
         local playerData = LocalData:Get()
         local powerupsData = playerData and playerData.Powerups
-        local openedAtLeastOneBoxType = false
+        local hasBoxesToOpen = false
 
-        if not powerupsData then
-            warn("Could not find Powerups data. Waiting...")
-            task.wait(5)
-        else
+        if powerupsData then
+            for _, boxName in ipairs(getgenv().Config.BOXES_TO_OPEN) do
+                if powerupsData[boxName] and powerupsData[boxName] > 0 then
+                    hasBoxesToOpen = true
+                    break
+                end
+            end
+        end
+
+        if hasBoxesToOpen then
+            print("--- Found boxes in inventory, starting open & claim cycle. ---")
+            
             -- Phase 1: Use all specified boxes from inventory
             for _, boxName in ipairs(getgenv().Config.BOXES_TO_OPEN) do
-                -- Check the exact quantity owned for this box type
-                local quantityOwned = powerupsData[boxName] or 0
-                
-                if quantityOwned > 0 then
-                    openedAtLeastOneBoxType = true
-                    print("-> Found " .. quantityOwned .. "x '" .. boxName .. "'. Attempting to use all.")
-                    
-                    -- Use the exact quantity you own
-                    local args = {"UseGift", boxName, quantityOwned}
+                if powerupsData and powerupsData[boxName] and powerupsData[boxName] > 0 then
+                    local ownedQuantity = powerupsData[boxName]
+                    print("-> Attempting to use " .. ownedQuantity .. "x '" .. boxName .. "'")
+                    local args = {"UseGift", boxName, ownedQuantity}
                     RemoteEvent:FireServer(unpack(args))
                     task.wait(1.0)
                 end
             end
 
-            -- Only proceed to the claim phase if we actually used some boxes
-            if openedAtLeastOneBoxType then
-                -- Phase 2: Claim all spawned gifts in the workspace
-                print("Waiting for gifts to spawn before claiming...")
-                task.wait(3)
+            -- Phase 2: Claim all spawned gifts in the workspace
+            print("Waiting for gifts to spawn before claiming...")
+            task.wait(3)
 
-                local giftsFolder = workspace.Rendered:FindFirstChild("Gifts")
-                if giftsFolder then
-                    local spawnedGifts = giftsFolder:GetChildren()
-                    if #spawnedGifts > 0 then
-                        print("Found " .. #spawnedGifts .. " spawned gifts to claim.")
-                        for i, gift in ipairs(spawnedGifts) do
-                            local giftId = gift.Name
-                            print("-> (" .. i .. "/" .. #spawnedGifts .. ") Claiming gift with ID: " .. giftId)
-                            local args = {"ClaimGift", giftId}
-                            RemoteEvent:FireServer(unpack(args))
-                            task.wait(0.5)
-                        end
-                    else
-                        print("No spawned gifts found in the workspace.") [cite: 807]
+            local giftsFolder = workspace.Rendered:FindFirstChild("Gifts")
+            if giftsFolder then
+                local spawnedGifts = giftsFolder:GetChildren()
+                if #spawnedGifts > 0 then
+                    print("Found " .. #spawnedGifts .. " spawned gifts to claim.")
+                    for i, gift in ipairs(spawnedGifts) do
+                        local giftId = gift.Name
+                        print("-> (" .. i .. "/" .. #spawnedGifts .. ") Claiming gift with ID: " .. giftId)
+                        local args = {"ClaimGift", giftId}
+                        RemoteEvent:FireServer(unpack(args))
+                        task.wait(0.5)
                     end
+                else
+                    print("No spawned gifts found in the workspace.")
                 end
-                task.wait(5)
-            else
-                -- Idling logic
-                print("No boxes found in inventory. Checking again in " .. getgenv().Config.IdleCheckInterval .. " seconds...")
-                task.wait(getgenv().Config.IdleCheckInterval)
             end
+            
+            -- Wait a moment before the next full check
+            task.wait(5)
+        else
+            print("No boxes found in inventory. Checking again in " .. getgenv().Config.IdleCheckInterval .. " seconds...")
+            task.wait(getgenv().Config.IdleCheckInterval)
         end
     end
     print("--- Auto Mystery Box script stopped. ---")
