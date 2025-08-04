@@ -11,7 +11,7 @@ local Config = {
     MIN_RIFT_MULTIPLIER = 5,
 
     -- ## SECONDARY GOAL: INDEX COMPLETION ##
-    INDEX_AS_FALLBACK = true,
+    INDEX_AS_FALLBACK = false,
     AUTO_COMPLETE_OVERWORLD_INDEX = true,
     AUTO_COMPLETE_OVERWORLD_SHINY_INDEX = false,
     AUTO_COMPLETE_MINIGAME_PARADISE_INDEX = false,
@@ -67,6 +67,18 @@ local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
 local VERTICAL_SPEED, HORIZONTAL_SPEED = 300, 30 
 
 -- ## Helper Functions ##
+
+local function isPlayerNearEgg(eggName, distance)
+    local eggPos = eggPositions[eggName]
+    if not eggPos then return false end
+    
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return false end
+
+    return (rootPart.Position - eggPos).Magnitude < distance
+end
+
 local function findBestPotionsFromList(potionNames)
     local playerData = LocalData:Get()
     if not (playerData and playerData.Potions) then return {} end
@@ -228,19 +240,30 @@ local function PerformFallbackHatch()
         print("Fallback Mode: Hatching HATCH_1X_EGG.")
         if cfg.HATCH_1X_EGG[1] then eggToHatchName = cfg.HATCH_1X_EGG[1]:gsub("-", " ") end
     end
+
     if eggToHatchName and eggToHatchName ~= "" then
         local eggPos = eggPositions[eggToHatchName]
         if eggPos then
-            print("Final fallback target: " .. eggToHatchName)
-            local world = PetToWorldMap[eggToHatchName] or "Overworld"
-            if world == "MinigameParadise" then RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.FastTravel.Spawn")
-            else RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn") end
-            task.wait(3)
-            performMovement(eggPos)
+            -- ## THE FIX: Only teleport and move if not already near the egg ##
+            if not isPlayerNearEgg(eggToHatchName, 20) then
+                print("Not in position for fallback egg. Moving to: " .. eggToHatchName)
+                local world = PetToWorldMap[eggToHatchName] or "Overworld"
+                if world == "MinigameParadise" then RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.FastTravel.Spawn")
+                else RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn") end
+                task.wait(3)
+                performMovement(eggPos)
+            else
+                print("Already in position at fallback egg. Continuing to hatch.")
+            end
+
             local hatchEndTime = tick() + cfg.FallbackHatchDuration
             while tick() < hatchEndTime do openRegularEgg() end
-        else print("Could not find position for fallback egg: " .. eggToHatchName) end
-    else print("No fallback egg could be determined. Waiting.") end
+        else
+            print("Could not find position for fallback egg: " .. eggToHatchName)
+        end
+    else
+        print("No fallback egg could be determined. Waiting.")
+    end
 end
 
 -- ## Main Automation Loop ##
