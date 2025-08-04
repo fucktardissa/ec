@@ -30,7 +30,6 @@ local Config = {
     HatchWhileFarmingTickets = false,
     PlayMinigameWhileFarmingTickets = true,
     HatchDuration = 15.0
-    ContinuousCollectionInterval = 2.5 -- Time in seconds between collecting nearby items
 }
 getgenv().Config = Config
 
@@ -50,13 +49,16 @@ local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Frame
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local MasteryData = require(ReplicatedStorage.Shared.Data.Mastery)
 
+-- ## State Variables ##
+local currentFarmingZone = "" -- NEW: Tracks the current farming area to prevent re-teleporting.
+
 -- ## Helper Functions ##
 local function parseCurrency(s) local num, suffix = tostring(s):match("([%d.]+)([mbk]?)"); num = tonumber(num) or 0; local mult = {b=1e9, m=1e6, k=1e3}; return num * (mult[suffix:lower()] or 1) end
 local function getCurrency(currencyType) local playerData = LocalData:Get(); return playerData and playerData[currencyType] or 0 end
 local function tweenTo(position) local character = LocalPlayer.Character; local rootPart = character and character:FindFirstChild("HumanoidRootPart"); if not rootPart then return end; local dist = (rootPart.Position - position).Magnitude; local time = dist / 40; local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) }); tween:Play(); tween.Completed:Wait() end
 local function openRegularEgg() VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(); VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait() end
 
--- MODIFIED: Now checks for "egg" in the item name before destroying it.
+-- MODIFIED: Collects items but now ignores deleting anything with "Egg" in its name.
 local function collectNearbyPickups()
     local collectRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Pickups"):WaitForChild("CollectPickup")
     local renderedFolder = workspace:WaitForChild("Rendered")
@@ -64,59 +66,72 @@ local function collectNearbyPickups()
     for _, child in ipairs(renderedFolder:GetChildren()) do
         if child.Name == "Chunker" then
             for _, item in ipairs(child:GetChildren()) do
-                -- Check if the item name contains "egg" (case-insensitive)
-                if not string.find(item.Name:lower(), "egg") then
-                    collectRemote:FireServer(item.Name)
+                collectRemote:FireServer(item.Name)
+                -- NEW: Only destroy the item if its name does NOT contain "Egg".
+                if not string.match(item.Name, "Egg") then
                     item:Destroy()
-                    collectedCount = collectedCount + 1
-                    task.wait()
                 end
+                collectedCount = collectedCount + 1
+                task.wait()
             end
         end
     end
-    if collectedCount > 0 then
-        print("Collected " .. collectedCount .. " nearby pickups.")
-    end
+    if collectedCount > 0 then print("Collected " .. collectedCount .. " nearby pickups.") end
 end
 
 local function playMinigame(name) print("-> Multitasking: Starting Minigame: " .. name); RemoteEvent:FireServer("SkipMinigameCooldown", name); RemoteEvent:FireServer("StartMinigame", name, "Insane"); RemoteEvent:FireServer("FinishMinigame"); print("-> Minigame Finished.") end
 
+-- MODIFIED: Checks the current zone before teleporting to avoid unnecessary travel.
 local function farmSpecificCurrency(currency)
     print("Farming for: " .. currency)
+    local targetZone, teleportPath
+    
     if currency == "Coins" or currency == "Gems" then
-        RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn"); task.wait(3)
+        targetZone, teleportPath = "Zen", "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn"
+    elseif currency == "Tickets" then
+        targetZone, teleportPath = "Hyperwave", "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn"
+    elseif currency == "FestivalCoins" then
+        targetZone, teleportPath = "Festival", "Workspace.Worlds.The Overworld.FastTravel.Spawn"
+    end
+
+    if targetZone and currentFarmingZone ~= targetZone then
+        print("Switching zones. Teleporting to farm: " .. currency)
+        RemoteEvent:FireServer("Teleport", teleportPath)
+        currentFarmingZone = targetZone
+        task.wait(3)
+    end
+    
+    if currency == "Coins" or currency == "Gems" then
         if getgenv().Config.HatchWhileFarmingGemsAndCoins then
             tweenTo(Vector3.new(-35, 15973, 45))
             local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
         end
-        -- REMOVED collectNearbyPickups()
     elseif currency == "Tickets" then
-        RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn"); task.wait(3)
         if getgenv().Config.HatchWhileFarmingTickets then
             tweenTo(workspace.Worlds["Minigame Paradise"].Islands["Hyperwave Island"].Island.Egg.Position)
             local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
         end
         if getgenv().Config.PlayMinigameWhileFarmingTickets then playMinigame("Hyper Darts") end
-        -- REMOVED collectNearbyPickups()
     elseif currency == "FestivalCoins" then
-        RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn"); task.wait(3)
-        if getgenv().Config.HatchWhileFarmingFestivalCoins then tweenTo(Vector3.new(243, 13, 229)); local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
-        else tweenTo(Vector3.new(206, 22, 183)) end
-        -- REMOVED collectNearbyPickups()
+        if getgenv().Config.HatchWhileFarmingFestivalCoins then
+            tweenTo(Vector3.new(243, 13, 229)); local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
+        else
+            tweenTo(Vector3.new(206, 22, 183))
+        end
     end
+    -- REMOVED: collectNearbyPickups() is now handled by its own continuous loop.
 end
 
--- ## Main Automation Logic ##
-
--- NEW: Continuous background collection
+-- NEW: This entire task runs in the background to constantly collect items.
 task.spawn(function()
+    print("Continuous item collection started.")
     while getgenv().Config.MasterScriptActive do
         collectNearbyPickups()
-        task.wait(getgenv().Config.ContinuousCollectionInterval)
+        task.wait(2) -- Interval between collection attempts
     end
 end)
 
--- Main Automation Loop
+-- ## Main Automation Loop ##
 task.spawn(function()
     print("Master Script started.")
     local lastEquipBestTime = 0
@@ -124,13 +139,13 @@ task.spawn(function()
     while getgenv().Config.MasterScriptActive do
         local cfg = getgenv().Config
         local actionTaken = false
+        local currencyNeeded = nil
         
         -- ## PRIORITY 1: AUTO MASTERY ##
         if cfg.AutoMastery then
             local playerData = LocalData:Get()
             local currentMasteryLevels = playerData.MasteryLevels or {}
             local masteryPaths = {"Buffs", "Pets", "Shops", "Minigames", "Rifts"}
-            local currencyNeeded = nil
             local allGoalsMet = true
 
             for _, pathName in ipairs(masteryPaths) do
@@ -152,18 +167,41 @@ task.spawn(function()
                     end
                 end
             end
-            if allGoalsMet then print("All mastery targets met. Disabling AutoMastery.") cfg.AutoMastery = false end
+            if allGoalsMet then print("All mastery targets met. Disabling AutoMastery."); cfg.AutoMastery = false end
         end
 
         -- ## PRIORITY 2: FARM FOR MASTERY OR CURRENCY GOALS ##
-        if not actionTaken and cfg.FARM_CURRENCY_IF_CANT_UPGRADE and currencyNeeded then
-            farmSpecificCurrency(currencyNeeded)
-            actionTaken = true
-        else -- Fallback to general currency farming if no specific mastery need
-            local minFestival = parseCurrency(cfg.MIN_FESTIVAL_COINS)
-            local minTickets = parseCurrency(cfg.MIN_TICKETS)
-            local minGems = parseCurrency(cfg.MIN_GEMS)
-            local minCoins = parseCurrency(cfg.MIN_COINS)
+        if not actionTaken then
+            if cfg.FARM_CURRENCY_IF_CANT_UPGRADE and currencyNeeded then
+                farmSpecificCurrency(currencyNeeded)
+                actionTaken = true
+            else 
+                local minFestival = parseCurrency(cfg.MIN_FESTIVAL_COINS)
+                local minTickets = parseCurrency(cfg.MIN_TICKETS)
+                local minGems = parseCurrency(cfg.MIN_GEMS)
+                local minCoins = parseCurrency(cfg.MIN_COINS)
 
-            if getCurrency("FestivalCoins") < minFestival then farmSpecificCurrency("FestivalCoins"); actionTaken = true
-            elseif getCurrency("Tickets") < minTickets then farmSpecific...
+                if getCurrency("FestivalCoins") < minFestival then farmSpecificCurrency("FestivalCoins"); actionTaken = true
+                elseif getCurrency("Tickets") < minTickets then farmSpecifics("Tickets"); actionTaken = true
+                elseif getCurrency("Gems") < minGems then farmSpecificCurrency("Gems"); actionTaken = true
+                elseif getCurrency("Coins") < minCoins then farmSpecificCurrency("Coins"); actionTaken = true
+                end
+            end
+        end
+
+        -- ## BACKGROUND TASK: EQUIP BEST PETS ##
+        if cfg.AutoEquipBest and (tick() - lastEquipBestTime > cfg.EquipBestInterval) then
+            print("Equipping best pets...")
+            RemoteEvent:FireServer("EquipBestPets")
+            lastEquipBestTime = tick()
+        end
+
+        if not actionTaken then
+            print("All goals met. Idling...")
+            task.wait(10)
+        else
+            task.wait(1) -- Shortened wait time as teleport/collection delays are handled elsewhere
+        end
+    end
+    print("Master Script has stopped.")
+end)
