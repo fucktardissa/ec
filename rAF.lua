@@ -30,6 +30,7 @@ local Config = {
     HatchWhileFarmingTickets = false,
     PlayMinigameWhileFarmingTickets = true,
     HatchDuration = 15.0
+    ContinuousCollectionInterval = 2.5 -- Time in seconds between collecting nearby items
 }
 getgenv().Config = Config
 
@@ -54,7 +55,30 @@ local function parseCurrency(s) local num, suffix = tostring(s):match("([%d.]+)(
 local function getCurrency(currencyType) local playerData = LocalData:Get(); return playerData and playerData[currencyType] or 0 end
 local function tweenTo(position) local character = LocalPlayer.Character; local rootPart = character and character:FindFirstChild("HumanoidRootPart"); if not rootPart then return end; local dist = (rootPart.Position - position).Magnitude; local time = dist / 40; local tween = TweenService:Create(rootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), { CFrame = CFrame.new(position) }); tween:Play(); tween.Completed:Wait() end
 local function openRegularEgg() VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(); VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait() end
-local function collectNearbyPickups() local collectRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Pickups"):WaitForChild("CollectPickup"); local renderedFolder = workspace:WaitForChild("Rendered"); local collectedCount = 0; for _, child in ipairs(renderedFolder:GetChildren()) do if child.Name == "Chunker" then for _, item in ipairs(child:GetChildren()) do collectRemote:FireServer(item.Name); item:Destroy(); collectedCount = collectedCount + 1; task.wait() end end end print("Collected " .. collectedCount .. " nearby pickups.") end
+
+-- MODIFIED: Now checks for "egg" in the item name before destroying it.
+local function collectNearbyPickups()
+    local collectRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Pickups"):WaitForChild("CollectPickup")
+    local renderedFolder = workspace:WaitForChild("Rendered")
+    local collectedCount = 0
+    for _, child in ipairs(renderedFolder:GetChildren()) do
+        if child.Name == "Chunker" then
+            for _, item in ipairs(child:GetChildren()) do
+                -- Check if the item name contains "egg" (case-insensitive)
+                if not string.find(item.Name:lower(), "egg") then
+                    collectRemote:FireServer(item.Name)
+                    item:Destroy()
+                    collectedCount = collectedCount + 1
+                    task.wait()
+                end
+            end
+        end
+    end
+    if collectedCount > 0 then
+        print("Collected " .. collectedCount .. " nearby pickups.")
+    end
+end
+
 local function playMinigame(name) print("-> Multitasking: Starting Minigame: " .. name); RemoteEvent:FireServer("SkipMinigameCooldown", name); RemoteEvent:FireServer("StartMinigame", name, "Insane"); RemoteEvent:FireServer("FinishMinigame"); print("-> Minigame Finished.") end
 
 local function farmSpecificCurrency(currency)
@@ -65,7 +89,7 @@ local function farmSpecificCurrency(currency)
             tweenTo(Vector3.new(-35, 15973, 45))
             local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
         end
-        collectNearbyPickups()
+        -- REMOVED collectNearbyPickups()
     elseif currency == "Tickets" then
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn"); task.wait(3)
         if getgenv().Config.HatchWhileFarmingTickets then
@@ -73,16 +97,26 @@ local function farmSpecificCurrency(currency)
             local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
         end
         if getgenv().Config.PlayMinigameWhileFarmingTickets then playMinigame("Hyper Darts") end
-        collectNearbyPickups()
+        -- REMOVED collectNearbyPickups()
     elseif currency == "FestivalCoins" then
         RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn"); task.wait(3)
         if getgenv().Config.HatchWhileFarmingFestivalCoins then tweenTo(Vector3.new(243, 13, 229)); local endTime = tick() + getgenv().Config.HatchDuration; while tick() < endTime do openRegularEgg() end
         else tweenTo(Vector3.new(206, 22, 183)) end
-        collectNearbyPickups()
+        -- REMOVED collectNearbyPickups()
     end
 end
 
--- ## Main Automation Loop ##
+-- ## Main Automation Logic ##
+
+-- NEW: Continuous background collection
+task.spawn(function()
+    while getgenv().Config.MasterScriptActive do
+        collectNearbyPickups()
+        task.wait(getgenv().Config.ContinuousCollectionInterval)
+    end
+end)
+
+-- Main Automation Loop
 task.spawn(function()
     print("Master Script started.")
     local lastEquipBestTime = 0
@@ -96,7 +130,7 @@ task.spawn(function()
             local playerData = LocalData:Get()
             local currentMasteryLevels = playerData.MasteryLevels or {}
             local masteryPaths = {"Buffs", "Pets", "Shops", "Minigames", "Rifts"}
-            local nextUpgradeCost, currencyNeeded = nil, nil
+            local currencyNeeded = nil
             local allGoalsMet = true
 
             for _, pathName in ipairs(masteryPaths) do
@@ -132,25 +166,4 @@ task.spawn(function()
             local minCoins = parseCurrency(cfg.MIN_COINS)
 
             if getCurrency("FestivalCoins") < minFestival then farmSpecificCurrency("FestivalCoins"); actionTaken = true
-            elseif getCurrency("Tickets") < minTickets then farmSpecificCurrency("Tickets"); actionTaken = true
-            elseif getCurrency("Gems") < minGems then farmSpecificCurrency("Gems"); actionTaken = true
-            elseif getCurrency("Coins") < minCoins then farmSpecificCurrency("Coins"); actionTaken = true
-            end
-        end
-
-        -- ## BACKGROUND TASK: EQUIP BEST PETS ##
-        if cfg.AutoEquipBest and (tick() - lastEquipBestTime > cfg.EquipBestInterval) then
-            print("Equipping best pets...")
-            RemoteEvent:FireServer("EquipBestPets")
-            lastEquipBestTime = tick()
-        end
-
-        if not actionTaken then
-            print("All goals met. Idling...")
-            task.wait(10)
-        else
-            task.wait(5)
-        end
-    end
-    print("Master Script has stopped.")
-end)
+            elseif getCurrency("Tickets") < minTickets then farmSpecific...
