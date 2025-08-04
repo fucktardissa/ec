@@ -1,4 +1,4 @@
--- Master Auto-Index, Rift & Potion Script (Final Priority Logic)
+-- Master Auto-Index, Rift & Potion Script (Normal Rift Priority)
 
 --[[
     ============================================================
@@ -7,13 +7,10 @@
 ]]
 local Config = {
     -- ## PRIMARY GOAL: STANDARD RIFT HUNTING ##
-    -- If all AUTO_COMPLETE settings are false, or if no index-specific actions
-    -- can be taken, the script will default to this mode.
-    RIFT_EGGS = {"Spikey-Egg"},
+    RIFT_EGGS = {"bee-egg"},
     MIN_RIFT_MULTIPLIER = 5,
 
     -- ## SECONDARY GOAL: INDEX COMPLETION ##
-    -- If no standard rifts are found, should the script work on the index?
     INDEX_AS_FALLBACK = true,
     AUTO_COMPLETE_OVERWORLD_INDEX = true,
     AUTO_COMPLETE_OVERWORLD_SHINY_INDEX = false,
@@ -21,10 +18,7 @@ local Config = {
     AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX = false,
 
     -- ## FINAL FALLBACK: EGG HATCHING ##
-    -- If both standard rifts and index tasks are unavailable, what egg should it hatch?
-    -- If true, it will find a missing index pet and go to its egg.
     HATCH_1X_EGG_AS_INDEX = true,
-    -- If the above is false, it will hatch this specific egg instead.
     HATCH_1X_EGG = {"Spikey-Egg"},
     FallbackHatchDuration = 10.0,
     
@@ -53,43 +47,24 @@ local PetDatabase = require(ReplicatedStorage.Shared.Data.Pets)
 
 -- ## Data & Mappings ##
 local IndexData = {
-    Overworld = {
-        ["Common Egg"] = {"Doggy", "Kitty", "Bunny", "Bear"},
-        ["Spotted Egg"] = {"Mouse", "Wolf", "Fox", "Polar Bear", "Panda"},
-        ["Iceshard Egg"] = {"Ice Kitty", "Deer", "Ice Wolf", "Piggy", "Ice Deer", "Ice Dragon"},
-        ["Spikey Egg"] = {"Golem", "Dinosaur", "Ruby Golem", "Dragon", "Dark Dragon", "Emerald Golem"},
-        ["Magma Egg"] = {"Magma Doggy", "Magma Deer", "Magma Fox", "Magma Bear", "Demon", "Inferno Dragon"},
-        ["Crystal Egg"] = {"Cave Bat", "Dark Bat", "Angel", "Emerald Bat", "Unicorn", "Flying Pig"},
-        ["Lunar Egg"] = {"Space Mouse", "Space Bull", "Lunar Fox", "Lunarcorn", "Lunar Serpent", "Electra"},
-        ["Void Egg"] = {"Void Kitty", "Void Bat", "Void Demon", "Dark Phoenix", "Neon Elemental", "NULLVoid"},
-        ["Hell Egg"] = {"Hell Piggy", "Hell Dragon", "Hell Crawler", "Inferno Demon", "Inferno Cube", "Virus"},
-        ["Nightmare Egg"] = {"Demon Doggy", "Skeletal Deer", "Night Crawler", "Hell Bat", "Green Hydra", "Demonic Hydra"},
-        ["Rainbow Egg"] = {"Red Golem", "Orange Deer", "Yellow Fox", "Green Angel", "Hexarium", "Rainbow Shock"}
-    },
-    MinigameParadise = {
-        ["Showman Egg"] = {"Game Doggy", "Gamer Boi", "Queen Of Hearts"},
-        ["Mining Egg"] = {"Mining Doggy", "Mining Bat", "Cave Mole", "Ore Golem", "Crystal Unicorn", "Stone Gargoyle"},
-        ["Cyber Egg"] = {"Robo Kitty", "Martian Kitty", "Cyber Wolf", "Cyborg Phoenix", "Space Invader", "Bionic Shard"},
-        ["Neon Egg"] = {"Neon Doggy", "Hologram Dragon", "Disco Ball", "Neon Wyvern", "Neon Wire Eye", "Equalizer"}
-    }
+    Overworld = { ["Common Egg"] = {"Doggy", "Kitty", "Bunny", "Bear"}, ["Spotted Egg"] = {"Mouse", "Wolf", "Fox", "Polar Bear", "Panda"}, ["Iceshard Egg"] = {"Ice Kitty", "Deer", "Ice Wolf", "Piggy", "Ice Deer", "Ice Dragon"}, ["Spikey Egg"] = {"Golem", "Dinosaur", "Ruby Golem", "Dragon", "Dark Dragon", "Emerald Golem"}, ["Magma Egg"] = {"Magma Doggy", "Magma Deer", "Magma Fox", "Magma Bear", "Demon", "Inferno Dragon"}, ["Crystal Egg"] = {"Cave Bat", "Dark Bat", "Angel", "Emerald Bat", "Unicorn", "Flying Pig"}, ["Lunar Egg"] = {"Space Mouse", "Space Bull", "Lunar Fox", "Lunarcorn", "Lunar Serpent", "Electra"}, ["Void Egg"] = {"Void Kitty", "Void Bat", "Void Demon", "Dark Phoenix", "Neon Elemental", "NULLVoid"}, ["Hell Egg"] = {"Hell Piggy", "Hell Dragon", "Hell Crawler", "Inferno Demon", "Inferno Cube", "Virus"}, ["Nightmare Egg"] = {"Demon Doggy", "Skeletal Deer", "Night Crawler", "Hell Bat", "Green Hydra", "Demonic Hydra"}, ["Rainbow Egg"] = {"Red Golem", "Orange Deer", "Yellow Fox", "Green Angel", "Hexarium", "Rainbow Shock"} },
+    MinigameParadise = { ["Showman Egg"] = {"Game Doggy", "Gamer Boi", "Queen Of Hearts"}, ["Mining Egg"] = {"Mining Doggy", "Mining Bat", "Cave Mole", "Ore Golem", "Crystal Unicorn", "Stone Gargoyle"}, ["Cyber Egg"] = {"Robo Kitty", "Martian Kitty", "Cyber Wolf", "Cyborg Phoenix", "Space Invader", "Bionic Shard"}, ["Neon Egg"] = {"Neon Doggy", "Hologram Dragon", "Disco Ball", "Neon Wyvern", "Neon Wire Eye", "Equalizer"} }
 }
 local PetToEggMap, EggToRiftMap, PetToWorldMap = {}, {}, {}
 for worldName, eggs in pairs(IndexData) do
     for eggName, pets in pairs(eggs) do
         local riftName = eggName:gsub(" ", "-"):lower() .. "-egg"
         EggToRiftMap[eggName] = riftName
-        for _, petName in ipairs(pets) do
-            PetToEggMap[petName] = eggName
-            PetToWorldMap[petName] = worldName
-        end
+        for _, petName in ipairs(pets) do PetToEggMap[petName] = eggName; PetToWorldMap[petName] = worldName; end
     end
 end
+local eggPositions = { ["Common Egg"] = Vector3.new(-83.86, 10.11, 1.57), ["Spotted Egg"] = Vector3.new(-93.96, 10.11, 7.41), ["Iceshard Egg"] = Vector3.new(-117.06, 10.11, 7.74), ["Spikey Egg"] = Vector3.new(-124.58, 10.11, 4.58), ["Magma Egg"] = Vector3.new(-133.02, 10.11, -1.55), ["Crystal Egg"] = Vector3.new(-140.20, 10.11, -8.36), ["Lunar Egg"] = Vector3.new(-143.85, 10.11, -15.93), ["Void Egg"] = Vector3.new(-145.91, 10.11, -26.13), ["Hell Egg"] = Vector3.new(-145.17, 10.11, -36.78), ["Nightmare Egg"] = Vector3.new(-142.35, 10.11, -45.15), ["Rainbow Egg"] = Vector3.new(-134.49, 10.11, -52.36), ["Mining Egg"] = Vector3.new(-120, 10, -64), ["Showman Egg"] = Vector3.new(-130, 10, -60), ["Cyber Egg"] = Vector3.new(-95, 10, -63), ["Infinity Egg"] = Vector3.new(-99, 9, -26), ["Neon Egg"] = Vector3.new(-83, 10, -57) }
 local EggsWithoutRifts = {["Common Egg"]=true, ["Spotted Egg"]=true, ["Iceshard Egg"]=true, ["Showman Egg"]=true}
 local shinyRequirements = {["Common"] = 16, ["Unique"] = 16, ["Rare"] = 12, ["Epic"] = 12, ["Legendary"] = 10}
 local world1TeleportPoints = {{name = "Zen", path = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn", height = 15970}, {name = "The Void", path = "Workspace.Worlds.The Overworld.Islands.The Void.Island.Portal.Spawn", height = 10135}, {name = "Twilight", path = "Workspace.Worlds.The Overworld.Islands.Twilight.Island.Portal.Spawn", height = 6855}, {name = "Outer Space", path = "Workspace.Worlds.The Overworld.Islands.Outer Space.Island.Portal.Spawn", height = 2655}}
 local world2TeleportPoints = {{name = "W2 Spawn", path = "Workspace.Worlds.Minigame Paradise.FastTravel.Spawn", height = 0}, {name = "Dice Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Dice Island.Island.Portal.Spawn", height = 2880}, {name = "Minecart Forest", path = "Workspace.Worlds.Minigame Paradise.Islands.Minecart Forest.Island.Portal.Spawn", height = 7660}, {name = "Robot Factory", path = "Workspace.Worlds.Minigame Paradise.Islands.Robot Factory.Island.Portal.Spawn", height = 13330}, {name = "Hyperwave Island", path = "Workspace.Worlds.Minigame Paradise.Islands.Hyperwave Island.Island.Portal.Spawn", height = 20010}}
 local world2RiftKeywords = {"Neon", "Cyber", "Showman", "Mining"}
-local VERTICAL_SPEED, HORIZONTAL_SPEED = 300, 30
+local VERTICAL_SPEED, HORIZONTAL_SPEED = 300, 30 
 
 -- ## Helper Functions ##
 local function findBestPotionsFromList(potionNames)
@@ -113,8 +88,8 @@ local function usePotions(potionList)
     local bestPotionsFound = findBestPotionsFromList(potionList)
     if not next(bestPotionsFound) then print("-> You do not own any of the required potions.") return end
     for _, potionData in pairs(bestPotionsFound) do
-        local quantityToUse = math.min(potionData.Amount, 10)
-        if quantityToUse > 0 then
+        local quantityToUse = 1
+        if potionData.Amount >= quantityToUse then
             print("-> Using " .. quantityToUse .. "x '" .. potionData.Name .. "' (Level " .. potionData.Level .. ")")
             RemoteEvent:FireServer("UsePotion", potionData.Name, potionData.Level, quantityToUse)
             task.wait(0.5)
@@ -132,17 +107,6 @@ local function isRiftValid(riftNameFromConfig)
         end
     end
     return nil
-end
-
-local function isCorrectRiftStillValid(riftInstance)
-    return riftInstance and riftInstance.Parent == workspace.Rendered.Rifts
-end
-
-local function isPlayerNearRift(riftInstance, distance)
-    local character = LocalPlayer.Character
-    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart or not isCorrectRiftStillValid(riftInstance) then return false end
-    return (humanoidRootPart.Position - riftInstance.Display.Position).Magnitude < distance
 end
 
 local function getRiftMultiplier(riftInstance)
@@ -168,32 +132,29 @@ local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     RemoteEvent:FireServer("Teleport", closestPoint.path)
 end
 
-local function performMovement(targetPosition)
-    local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
-    local camera = workspace.CurrentCamera
-    if not (humanoid and humanoidRootPart and camera) then warn("Movement failed: Character or Camera not found.") return end
-    local originalCameraType, originalCameraSubject = camera.CameraType, camera.CameraSubject
-    camera.CameraType = Enum.CameraType.Scriptable
-    local cameraConnection = RunService.RenderStepped:Connect(function()
-        camera.CFrame = CFrame.lookAt(humanoidRootPart.Position - (humanoidRootPart.CFrame.LookVector * 15) + Vector3.new(0, 10, 25), humanoidRootPart.Position)
-    end)
-    local originalCollisions = {}
-    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end
-    local originalPlatformStand = humanoid.PlatformStand
-    humanoid.PlatformStand = true
-    local startPos = humanoidRootPart.Position
-    local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z)
-    local verticalTime = math.clamp((startPos - intermediatePos.Position).Magnitude / VERTICAL_SPEED, 0.5, 5)
-    TweenService:Create(humanoidRootPart, TweenInfo.new(verticalTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = intermediatePos}):Play().Completed:Wait()
-    local horizontalTime = math.clamp((humanoidRootPart.Position - targetPosition).Magnitude / HORIZONTAL_SPEED, 0.5, 10)
-    TweenService:Create(humanoidRootPart, TweenInfo.new(horizontalTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = CFrame.new(targetPosition)}):Play().Completed:Wait()
-    cameraConnection:Disconnect()
-    camera.CameraType, camera.CameraSubject = originalCameraType, originalCameraSubject
-    humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
-    humanoid.PlatformStand = originalPlatformStand
-    for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end
+local function performMovement(targetPosition) 
+    local character = LocalPlayer.Character 
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid") 
+    local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart") 
+    if not (humanoid and humanoidRootPart) then 
+        warn("Movement failed: Character parts not found.")
+        return 
+    end 
+    local originalCollisions = {} 
+    for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end 
+    local originalPlatformStand = humanoid.PlatformStand 
+    humanoid.PlatformStand = true 
+    local startPos = humanoidRootPart.Position 
+    local intermediatePos = CFrame.new(startPos.X, targetPosition.Y, startPos.Z) 
+    local verticalTime = (startPos - intermediatePos.Position).Magnitude / VERTICAL_SPEED 
+    local verticalTween = TweenService:Create(humanoidRootPart, TweenInfo.new(verticalTime, Enum.EasingStyle.Linear), {CFrame = intermediatePos}) 
+    verticalTween:Play(); verticalTween.Completed:Wait() 
+    local horizontalTime = (humanoidRootPart.Position - targetPosition).Magnitude / HORIZONTAL_SPEED 
+    local horizontalTween = TweenService:Create(humanoidRootPart, TweenInfo.new(horizontalTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPosition)}) 
+    horizontalTween:Play(); horizontalTween.Completed:Wait() 
+    humanoidRootPart.Velocity = Vector3.new(0, 0, 0) 
+    humanoid.PlatformStand = originalPlatformStand 
+    for part, canCollide in pairs(originalCollisions) do if part and part.Parent then part.CanCollide = canCollide; end end 
 end
 
 local function openRift()
@@ -238,47 +199,35 @@ local function EngageRift(riftInstance, riftNameFromConfig)
     local multiplier = getRiftMultiplier(riftInstance)
     if multiplier >= 25 and #getgenv().Config.POTIONS_WHEN_25X_RIFT > 0 then usePotions(getgenv().Config.POTIONS_WHEN_25X_RIFT)
     elseif #getgenv().Config.POTIONS_WHEN_RIFT > 0 then usePotions(getgenv().Config.POTIONS_WHEN_RIFT) end
-    local movementAttempts, maxAttempts, inPosition = 0, 3, false
-    while isCorrectRiftStillValid(riftInstance) and movementAttempts < maxAttempts and not inPosition do
-        movementAttempts = movementAttempts + 1
-        local targetPosition = riftInstance.Display.Position + Vector3.new(0, 4, 0)
-        local isWorld2Rift = false
-        for _, keyword in ipairs(world2RiftKeywords) do
-            if string.lower(riftNameFromConfig):find(string.lower(keyword)) then isWorld2Rift = true; break end
-        end
-        if isWorld2Rift then teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
-        else teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1") end
-        task.wait(5)
-        performMovement(targetPosition)
-        task.wait(1)
-        if isPlayerNearRift(riftInstance, 15) then inPosition = true
-        else warn("Proximity check failed. Retrying...") end
+    
+    local targetPosition = riftInstance.Display.Position + Vector3.new(0, 4, 0)
+    local isWorld2Rift = false
+    for _, keyword in ipairs(world2RiftKeywords) do
+        if string.lower(riftNameFromConfig):find(string.lower(keyword)) then isWorld2Rift = true; break end
     end
-    if inPosition then
-        print("Hatching rift...")
-        while isCorrectRiftStillValid(riftInstance) do openRift(); task.wait(0.5) end
-        print("Rift is gone.")
-    else warn("Failed to get near the rift.") end
+    if isWorld2Rift then teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
+    else teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1") end
+    
+    task.wait(5)
+    performMovement(targetPosition)
+    task.wait(1)
+    
+    print("Hatching rift...")
+    while isRiftValid(riftInstance.Name) do openRift(); task.wait(0.5) end
+    print("Rift is gone.")
 end
 
 local function PerformFallbackHatch()
     print("No standard or index rifts available. Proceeding to final fallback hatch.")
-    local eggToHatchName = ""
-    local cfg = getgenv().Config
-
+    local eggToHatchName, cfg = "", getgenv().Config
     if cfg.HATCH_1X_EGG_AS_INDEX then
         print("Fallback Mode: Hatching a needed index egg.")
         local missingForIndex = getMissingPets("Overworld") or getMissingPets("MinigameParadise") or getMissingPets("OverworldShiny") or getMissingPets("MinigameParadiseShiny")
-        if missingForIndex then
-            eggToHatchName = PetToEggMap[missingForIndex:gsub("Shiny ", "")]
-        end
+        if missingForIndex then eggToHatchName = PetToEggMap[missingForIndex:gsub("Shiny ", "")] end
     else
         print("Fallback Mode: Hatching HATCH_1X_EGG.")
-        if cfg.HATCH_1X_EGG[1] then
-            eggToHatchName = cfg.HATCH_1X_EGG[1]:gsub("-", " ")
-        end
+        if cfg.HATCH_1X_EGG[1] then eggToHatchName = cfg.HATCH_1X_EGG[1]:gsub("-", " ") end
     end
-
     if eggToHatchName and eggToHatchName ~= "" then
         local eggPos = eggPositions[eggToHatchName]
         if eggPos then
@@ -290,14 +239,9 @@ local function PerformFallbackHatch()
             performMovement(eggPos)
             local hatchEndTime = tick() + cfg.FallbackHatchDuration
             while tick() < hatchEndTime do openRegularEgg() end
-        else
-            print("Could not find position for fallback egg: " .. eggToHatchName)
-        end
-    else
-        print("No fallback egg could be determined. Waiting.")
-    end
+        else print("Could not find position for fallback egg: " .. eggToHatchName) end
+    else print("No fallback egg could be determined. Waiting.") end
 end
-
 
 -- ## Main Automation Loop ##
 print("Master Script Started.")
@@ -346,7 +290,7 @@ task.spawn(function()
                         local petDBInfo = PetDatabase[basePetName]
                         local requiredAmount = shinyRequirements[petDBInfo.Rarity] or 10
                         if getNormalPetCount(basePetName) >= requiredAmount then
-                            print("Have enough to craft '"..missingPet.."''. Crafting...")
+                            print("Have enough to craft '"..missingPet.."'. Crafting...")
                             local instanceId = findPetInstanceForCrafting(basePetName)
                             if instanceId then RemoteEvent:FireServer("MakePetShiny", instanceId); task.wait(2) else warn("Could not find an instance of '"..basePetName.."' to craft with.") end
                             actionTaken = true
