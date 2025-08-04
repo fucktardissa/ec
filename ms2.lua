@@ -10,7 +10,7 @@ local Config = {
     AutoMilestones = true,
     
     -- Delay in seconds between finishing one minigame and starting the next
-    CycleDelay = 1.0
+    CycleDelay = 0
 }
 getgenv().Config = Config
 
@@ -22,9 +22,30 @@ getgenv().Config = Config
 
 -- ## Services & Modules ##
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("RemoteEvent")
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local MilestonesModule = require(ReplicatedStorage.Shared.Data.Milestones)
+
+-- ## Anti-Transition Patcher ##
+local function patchTransitions()
+    pcall(function()
+        print("Applying anti-transition patch...")
+        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+        local ScreenGui = PlayerGui:WaitForChild("ScreenGui")
+        if ScreenGui then
+            local Transition = ScreenGui:FindFirstChild("Transition")
+            if Transition then
+                Transition.Enabled = false
+                print("-> Transition screen disabled.")
+            else
+                warn("-> Could not find Transition screen to disable.")
+            end
+        end
+    end)
+end
+patchTransitions() -- Run the patch at the start
 
 -- ## Helper Functions ##
 local function formatTaskDescription(task)
@@ -50,24 +71,30 @@ local function playMinigame(name, difficulty)
     RemoteEvent:FireServer("FinishMinigame")
     
     print("-> Minigame finished. Waiting for cooldown...")
-    task.wait(getgenv().Config.CycleDelay)
+    
+    -- ## NEW: Apply extra delay for specific minigames ##
+    if name == "Pet Match" or name == "Cart Escape" then
+        print("-> Applying extra 5 second delay for " .. name)
+        task.wait(getgenv().Config.CycleDelay + 5)
+    else
+        task.wait(getgenv().Config.CycleDelay)
+    end
 end
 
 -- ## Main Logic ##
 task.spawn(function()
     print("--- Starting Auto Minigame Milestones script. ---")
 
-    -- This table now defines the exact task for each of the 9 minigame milestones.
     local milestoneTasks = {
-        [1] = { name = "Robot Claw",   difficulty = "Easy" },   -- Task: CompleteMinigame(1)
-        [2] = { name = "Robot Claw",   difficulty = "Easy" },   -- Task: CompleteMinigame(5)
-        [3] = { name = "Robot Claw",   difficulty = "Easy" },   -- Task: CompleteMinigame(15)
-        [4] = { name = "Pet Match",    difficulty = "Insane" },      -- Task: CompleteMinigame(15, "Pet Match")
-        [5] = { name = "Cart Escape",  difficulty = "Insane" },      -- Task: CompleteMinigame(15, "Cart Escape")
-        [6] = { name = "Robot Claw",   difficulty = "Insane" },      -- Task: CompleteMinigame(15, "Robot Claw")
-        [7] = { name = "Robot Claw",   difficulty = "Hard" },   -- Task: CompleteMinigame(75, nil, "Hard")
-        [8] = { name = "Robot Claw",   difficulty = "Insane" }, -- Task: CompleteMinigame(125, nil, "Insane")
-        [9] = { name = "Robot Claw",   difficulty = "Insane" }  -- Task: CompleteMinigame(500)
+        [1] = { name = "Robot Claw",   difficulty = "Easy" },
+        [2] = { name = "Robot Claw",   difficulty = "Easy" },
+        [3] = { name = "Robot Claw",   difficulty = "Easy" },
+        [4] = { name = "Pet Match",    difficulty = nil },
+        [5] = { name = "Cart Escape",  difficulty = nil },
+        [6] = { name = "Robot Claw",   difficulty = nil },
+        [7] = { name = "Robot Claw",   difficulty = "Hard" },
+        [8] = { name = "Robot Claw",   difficulty = "Insane" },
+        [9] = { name = "Robot Claw",   difficulty = "Insane" }
     }
     
     while getgenv().Config.AutoMilestones do
@@ -76,9 +103,8 @@ task.spawn(function()
         local minigameMilestones = MilestonesModule.Minigames
         
         local nextMilestoneNumber = 0
-
-        -- Find the first uncompleted minigame milestone number
         local milestoneCounter = 0
+
         for tierName, tierData in pairs(minigameMilestones.Tiers) do
             for i, levelData in ipairs(tierData.Levels) do
                 milestoneCounter = milestoneCounter + 1
@@ -99,7 +125,6 @@ task.spawn(function()
 
         print("Next milestone to complete: milestone-minigame-" .. nextMilestoneNumber)
         
-        -- Get the task from our hardcoded list
         local taskToDo = milestoneTasks[nextMilestoneNumber]
         
         if taskToDo then
