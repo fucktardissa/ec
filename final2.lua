@@ -1,30 +1,13 @@
 --[[
     ================================================================
-    -- ## ONE-CLICK STARTER ROUTINE SCRIPT ##
+    -- ## ONE-CLICK STARTER ROUTINE SCRIPT (REVISED) ##
     ================================================================
     --
     -- DESCRIPTION:
     -- This script automates the entire early-game progression.
     -- It is designed to be run once on a new account to quickly
-    -- unlock islands, redeem codes, upgrade essential masteries,
+    -- unlock content, use starting items, upgrade essential masteries,
     -- and prepare the player for World 2.
-    --
-    -- HOW IT WORKS:
-    -- 1. Unlocks all islands and redeems all codes.
-    -- 2. Starts bubbling and selling in the background continuously.
-    -- 3. Hatches Iceshard Eggs for 30 seconds to get starter pets.
-    -- 4. Enters a primary loop to farm currency (Coins/Gems) and
-    --    upgrade masteries to the levels defined in the config.
-    -- 5. Once mastery goals are met, it will begin farming the
-    --    event area for Festival Coins.
-    -- 6. The script completes when all goals are met.
-    --
-    -- FAST ROUTINE CONCEPT:
-    -- A future "Fast Routine" could be implemented by creating a
-    -- separate config that ONLY sets a target for Pet Mastery
-    -- (e.g., level 20) and sets all other masteries to 0. The
-    -- script would then only focus on that single goal for a
-    -- quicker, more focused progression boost.
     --
 ]]
 
@@ -35,6 +18,10 @@
     ============================================================
 ]]
 local StarterRoutineConfig = {
+    -- ## Potion Usage ##
+    -- The script will use the BEST TIER of each potion type listed below at the start of the routine.
+    USE_POTIONS_ON_START = {"Coins", "Lucky", "Speed", "Infinity-Elixir"},
+
     -- ## Mastery Level Targets ##
     -- The script will farm currency until these levels are reached.
     TargetLevels = {
@@ -48,12 +35,6 @@ local StarterRoutineConfig = {
     -- ## Currency & Unlock Requirements ##
     MIN_COINS_FOR_WORLD_2 = 10e9, -- 10 Billion coins needed to unlock the World 2 portal.
     GEMS_FOR_EVENT_AREA = 150000, -- Gems needed to trigger the event area unlock.
-
-    -- ## Advanced Settings ##
-    -- If true, the script will use your best potions right before it thinks
-    -- you can afford your first Rainbow Egg to maximize pet chances. This only
-    -- happens ONCE.
-    USE_POTIONS_ON_FIRST_RAINBOW_EGG = true,
 }
 
 --[[
@@ -63,7 +44,6 @@ local StarterRoutineConfig = {
 ]]
 
 -- ## Setup: Services, Modules, and Helper Functions ##
--- (These are consolidated from the master script for this routine)
 print("--- LOADING STARTER ROUTINE SERVICES & MODULES ---")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -83,12 +63,22 @@ local function getCurrency(currencyType)
     return playerData and playerData[currencyType] or 0
 end
 
+-- Helper function to check if the player is near a specific location
+local function isPlayerNear(targetPos, maxDistance)
+    local character = LocalPlayer.Character
+    if not character then return false end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return false end
+    return (rootPart.Position - targetPos).Magnitude <= maxDistance
+end
+
 -- Helper function for movement
 local function performMovement(targetPosition)
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local humanoid = character:WaitForChild("Humanoid")
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-    if not (humanoid and humanoidRootPart) then return end
+    if not (humanoid and humanoidRootPart) or isPlayerNear(targetPosition, 10) then return end
+    print("Moving to new position...")
     local originalPlatformStand = humanoid.PlatformStand
     humanoid.PlatformStand = true
     local moveTween = TweenService:Create(humanoidRootPart, TweenInfo.new(2, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPosition)})
@@ -97,25 +87,46 @@ local function performMovement(targetPosition)
     humanoid.PlatformStand = originalPlatformStand
 end
 
--- Helper function to use best COIN potions
-local function useBestCoinPotions()
-    print("Attempting to use all best COIN potions...")
+-- Helper function to use the best tier of specified potion types
+local function useBestPotionsFromList(potionTypes)
+    print("Attempting to use best available potions from list...")
     local playerData = LocalData:Get()
     if not (playerData and playerData.Potions) then return end
-    local bestCoinPotion = nil
+    
+    local potionsToUse = {}
+    -- First, find the highest level for each wanted potion type
     for _, potionData in pairs(playerData.Potions) do
-        if potionData.Name == "Coins" then
-            if not bestCoinPotion or potionData.Level > bestCoinPotion.Level then
-                bestCoinPotion = potionData
+        if table.find(potionTypes, potionData.Name) then
+            if not potionsToUse[potionData.Name] or potionData.Level > potionsToUse[potionData.Name].Level then
+                potionsToUse[potionData.Name] = potionData
             end
         end
     end
-    if bestCoinPotion and bestCoinPotion.Amount > 0 then
-        print("-> Using " .. bestCoinPotion.Amount .. "x '" .. bestCoinPotion.Name .. "' (Level " .. bestCoinPotion.Level .. ")")
-        RemoteEvent:FireServer("UsePotion", bestCoinPotion.Name, bestCoinPotion.Level, bestCoinPotion.Amount)
-        task.wait(1)
-    else
-        print("-> No coin potions found.")
+    -- Now, use the potions we found
+    for name, potion in pairs(potionsToUse) do
+        if potion.Amount > 0 then
+            print("-> Using " .. potion.Amount .. "x '" .. potion.Name .. "' (Level " .. potion.Level .. ")")
+            RemoteEvent:FireServer("UsePotion", potion.Name, potion.Level, potion.Amount)
+            task.wait(0.5)
+        end
+    end
+end
+
+-- Helper function to use all Golden Orbs
+local function useAllGoldenOrbs()
+    print("Attempting to use all Golden Orbs...")
+    local playerData = LocalData:Get()
+    if not (playerData and playerData.Powerups and playerData.Powerups["Golden Orb"]) then
+        print("-> No Golden Orbs found.")
+        return
+    end
+    local orbCount = playerData.Powerups["Golden Orb"]
+    if orbCount > 0 then
+        print("-> Found " .. orbCount .. " Golden Orbs. Using all...")
+        for i = 1, orbCount do
+            RemoteEvent:FireServer("UseGoldenOrb")
+            task.wait(0.2)
+        end
     end
 end
 
@@ -150,13 +161,12 @@ task.spawn(function()
 
     -- STEP 0: UNLOCK ALL ISLANDS
     print("[STEP 0] Unlocking all available islands...")
-    local allIslandNames = { "Floating Island", "Outer Space", "Twilight", "The Void", "Zen" }
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local rootPart = character:WaitForChild("HumanoidRootPart")
     local originalCFrame = rootPart.CFrame
     for _, islandModel in ipairs(Workspace.Worlds["The Overworld"].Islands:GetChildren()) do
         local hitbox = islandModel:FindFirstChild("UnlockHitbox", true)
-        if hitbox and table.find(allIslandNames, islandModel.Name) then
+        if hitbox then
             print("Unlocking: " .. islandModel.Name)
             rootPart.CFrame = hitbox.CFrame; task.wait(1.0)
         end
@@ -178,29 +188,27 @@ task.spawn(function()
 
     -- STEP 2 & 3: CONSTANT BUBBLE & SELL (BACKGROUND TASKS)
     print("[STEP 2 & 3] Starting background bubble/sell process...")
-    task.spawn(function() -- Bubbler
-        while true do
-            pcall(function() RemoteEvent:FireServer("BlowBubble") end)
-            task.wait(0.1)
-        end
+    task.spawn(function()
+        while true do pcall(function() RemoteEvent:FireServer("BlowBubble") end); task.wait(0.1) end
     end)
-    task.spawn(function() -- Seller
-        while true do
-            pcall(function() RemoteEvent:FireServer("SellBubble") end)
-            task.wait(0.1)
-        end
+    task.spawn(function()
+        while true do pcall(function() RemoteEvent:FireServer("SellBubble") end); task.wait(0.1) end
     end)
 
-    -- STEP 4: HATCH STARTER PETS (ICESHARD EGG)
-    print("[STEP 4] Moving to Iceshard Egg to hatch starter pets...")
-    local iceshardEggPosition = Vector3.new(-117.06, 10.11, 7.74)
+    -- STEP 4: USE POTIONS & ORBS, THEN HATCH STARTER PETS
+    print("[STEP 4] Using starting items...")
+    useBestPotionsFromList(StarterRoutineConfig.USE_POTIONS_ON_START)
+    useAllGoldenOrbs()
+
+    print("Moving to Iceshard Egg to hatch starter pets...")
+    local iceshardEggPosition = Vector3.new(-11, 9, -51) -- Corrected coordinate
     performMovement(iceshardEggPosition)
     
     print("Hatching for 30 seconds...")
     local hatchEndTime = tick() + 30
     while tick() < hatchEndTime do
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait();
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait();
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05);
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait(0.05);
     end
     
     print("Equipping best pets...")
@@ -210,17 +218,13 @@ task.spawn(function()
 
     -- STEP 5, 6, 8: CORE FARMING & MASTERY LOOP
     print("[STEP 5] Starting core mastery and farming loop.")
-    print("Using all available Golden Orbs...")
-    pcall(function() RemoteEvent:FireServer("UseGoldenOrb") end) -- This will likely need to be looped based on orb count
-    
-    useBestCoinPotions()
-    
     print("Waiting 3 minutes before starting mastery upgrades to build resources...")
     task.wait(180)
 
     local masteryGoalsMet = false
     local eventAreaUnlocked = false
-    local rainbowEggPosition = Vector3.new(-134.49, 10.11, -52.36)
+    local zenTeleportPath = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn"
+    local zenFarmingPosition = Vector3.new(-36, 15973, 47) -- Corrected Rainbow Egg hatch spot in Zen
 
     while not masteryGoalsMet do
         -- Check and Engage Rainbow Rift
@@ -228,7 +232,6 @@ task.spawn(function()
         if riftInstance then
             print("Rainbow Egg Rift detected! Engaging.")
             engageRift(riftInstance)
-            performMovement(rainbowEggPosition) -- Return to egg after rift
         end
 
         -- Check if we can unlock the event area
@@ -264,25 +267,19 @@ task.spawn(function()
 
         -- Farming Logic
         if not canAffordUpgrade then
-            print("Cannot afford next mastery upgrade. Farming at Zen...")
-            local zenFarmingPosition = Vector3.new(-35, 15973, 45) -- Near Zen chests
-            performMovement(zenFarmingPosition)
-
-            -- Move to Rainbow Egg to hatch while farming
-            print("Moving to Rainbow Egg to hatch while farming coins/gems...")
-            performMovement(rainbowEggPosition)
-
-            -- Check for one-time potion use before hatching
-            if StarterRoutineConfig.USE_POTIONS_ON_FIRST_RAINBOW_EGG and getCurrency("Coins") >= 1500000 then
-                print("Coin threshold for Rainbow Egg met. Using best potions ONCE.")
-                -- This should be expanded to use Lucky, Mythic, etc.
-                useBestCoinPotions() -- Re-using coin potions as an example
-                StarterRoutineConfig.USE_POTIONS_ON_FIRST_RAINBOW_EGG = false -- IMPORTANT: Prevents re-use
+            -- Teleport to Zen if not already there
+            if not isPlayerNear(zenFarmingPosition, 500) then
+                print("Not near Zen. Teleporting to farm...")
+                RemoteEvent:FireServer("Teleport", zenTeleportPath)
+                task.wait(3) -- Wait for teleport to complete
             end
             
+            -- Move to Rainbow Egg spot to hatch while farming
+            performMovement(zenFarmingPosition)
+
             -- Hatch one egg
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait();
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait();
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05);
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait(0.05);
         end
         task.wait(1) -- General delay for the loop
     end
@@ -292,19 +289,21 @@ task.spawn(function()
     -- STEP 10: FARM FESTIVAL COINS
     if eventAreaUnlocked then
         print("[STEP 10] Moving to farm Festival Coins...")
-        local festivalFarmingPosition = Vector3.new(206, 22, 183) -- Position in event area
+        local festivalFarmingPosition = Vector3.new(206, 22, 183)
         performMovement(festivalFarmingPosition)
-        -- Add a loop here to farm for a specific duration or until a coin goal
         print("Now in position to farm Festival Coins. Routine will end here for now.")
     end
 
     -- STEP 11: FINAL CHECK FOR WORLD 2
     print("[STEP 11] Final check for World 2 requirements...")
-    while getCurrency("Coins") < StarterRoutineConfig.MIN_COINS_FOR_WORLD_2 do
+    if getCurrency("Coins") < StarterRoutineConfig.MIN_COINS_FOR_WORLD_2 then
         print("Coins still below 10 Billion. Returning to Zen to farm...")
-        local zenFarmingPosition = Vector3.new(-35, 15973, 45)
-        performMovement(zenFarmingPosition)
-        task.wait(60) -- Farm for 1 minute before re-checking
+        if not isPlayerNear(zenFarmingPosition, 500) then
+            RemoteEvent:FireServer("Teleport", zenTeleportPath)
+            task.wait(3)
+        end
+        performMovement(Vector3.new(-35, 15973, 45)) -- A spot near Zen chests
+        print("Manual farming may be required to reach 10B coins.")
     end
 
     print("--- STARTER ROUTINE COMPLETE! You are ready for World 2. ---")
