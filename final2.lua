@@ -1,6 +1,6 @@
 --[[
     ================================================================
-    -- ## ONE-CLICK STARTER ROUTINE SCRIPT (REVISED) ##
+    -- ## ONE-CLICK STARTER ROUTINE SCRIPT (V2) ##
     ================================================================
     --
     -- DESCRIPTION:
@@ -20,7 +20,7 @@
 local StarterRoutineConfig = {
     -- ## Potion Usage ##
     -- The script will use the BEST TIER of each potion type listed below at the start of the routine.
-    USE_POTIONS_ON_START = {"Coins", "Lucky", "Speed", "Infinity-Elixir"},
+    USE_POTIONS_ON_START = {"Coins", "Lucky", "Speed", "Infinity Potion"},
 
     -- ## Mastery Level Targets ##
     -- The script will farm currency until these levels are reached.
@@ -93,19 +93,19 @@ local function useBestPotionsFromList(potionTypes)
     local playerData = LocalData:Get()
     if not (playerData and playerData.Potions) then return end
     
-    local potionsToUse = {}
-    -- First, find the highest level for each wanted potion type
+    local bestPotions = {}
     for _, potionData in pairs(playerData.Potions) do
         if table.find(potionTypes, potionData.Name) then
-            if not potionsToUse[potionData.Name] or potionData.Level > potionsToUse[potionData.Name].Level then
-                potionsToUse[potionData.Name] = potionData
+            if not bestPotions[potionData.Name] or potionData.Level > bestPotions[potionData.Name].Level then
+                bestPotions[potionData.Name] = potionData
             end
         end
     end
-    -- Now, use the potions we found
-    for name, potion in pairs(potionsToUse) do
+    
+    for name, potion in pairs(bestPotions) do
         if potion.Amount > 0 then
             print("-> Using " .. potion.Amount .. "x '" .. potion.Name .. "' (Level " .. potion.Level .. ")")
+            -- The remote takes Name, Level, and Amount as separate arguments.
             RemoteEvent:FireServer("UsePotion", potion.Name, potion.Level, potion.Amount)
             task.wait(0.5)
         end
@@ -130,25 +130,24 @@ local function useAllGoldenOrbs()
     end
 end
 
--- Helper function to check if a rift is active
-local function isRiftValid(riftName)
-    local riftFolder = workspace.Rendered:FindFirstChild("Rifts")
-    if not riftFolder then return nil end
-    return riftFolder:FindFirstChild(riftName)
-end
-
--- Helper function to engage a rift
-local function engageRift(riftInstance)
-    print("Engaging target rift: " .. riftInstance.Name)
-    local targetPosition = riftInstance.Display.Position + Vector3.new(0, 4, 0)
-    performMovement(targetPosition)
-    task.wait(1)
-    print("Hatching rift...")
-    while riftInstance and riftInstance.Parent do
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game); task.wait(0.1); VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
-        task.wait(0.5)
+-- Helper function to collect nearby resources (from user-provided script)
+local function collectNearbyPickups()
+    local collectRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Pickups"):WaitForChild("CollectPickup")
+    local renderedFolder = workspace:WaitForChild("Rendered")
+    local collectedCount = 0
+    for _, child in ipairs(renderedFolder:GetChildren()) do
+        if child.Name == "Chunker" then
+            for _, item in ipairs(child:GetChildren()) do
+                collectRemote:FireServer(item.Name)
+                item:Destroy()
+                collectedCount = collectedCount + 1
+                task.wait()
+            end
+        end
     end
-    print("Rift is gone.")
+    if collectedCount > 0 then
+        print("Collected " .. collectedCount .. " nearby pickups.")
+    end
 end
 
 print("--- ALL SERVICES & MODULES LOADED SUCCESSFULLY ---")
@@ -167,7 +166,6 @@ task.spawn(function()
     for _, islandModel in ipairs(Workspace.Worlds["The Overworld"].Islands:GetChildren()) do
         local hitbox = islandModel:FindFirstChild("UnlockHitbox", true)
         if hitbox then
-            print("Unlocking: " .. islandModel.Name)
             rootPart.CFrame = hitbox.CFrame; task.wait(1.0)
         end
     end
@@ -201,7 +199,7 @@ task.spawn(function()
     useAllGoldenOrbs()
 
     print("Moving to Iceshard Egg to hatch starter pets...")
-    local iceshardEggPosition = Vector3.new(-11, 9, -51) -- Corrected coordinate
+    local iceshardEggPosition = Vector3.new(-11, 9, -51)
     performMovement(iceshardEggPosition)
     
     print("Hatching for 30 seconds...")
@@ -216,95 +214,67 @@ task.spawn(function()
     print("[STEP 4] Initial hatching complete.")
     task.wait(2)
 
-    -- STEP 5, 6, 8: CORE FARMING & MASTERY LOOP
-    print("[STEP 5] Starting core mastery and farming loop.")
-    print("Waiting 3 minutes before starting mastery upgrades to build resources...")
+    -- STEP 5: START THE FARMING LOOP (RUNS IN THE BACKGROUND)
+    local farmingActive = true
+    task.spawn(function()
+        print("[STEP 5] Starting background farming and collection loop.")
+        local zenTeleportPath = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn"
+        local zenFarmingPosition = Vector3.new(-36, 15973, 47)
+
+        while farmingActive do
+            if not isPlayerNear(zenFarmingPosition, 500) then
+                print("Not near Zen. Teleporting to farm...")
+                RemoteEvent:FireServer("Teleport", zenTeleportPath)
+                task.wait(3)
+            end
+            performMovement(zenFarmingPosition)
+            
+            -- Hatch one egg while farming
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05);
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait(0.05);
+            
+            -- Collect any resources that have spawned
+            collectNearbyPickups()
+            
+            task.wait(0.5) -- Short delay to prevent spamming
+        end
+    end)
+
+    -- STEP 6: WAIT FOR RESOURCES TO BUILD
+    print("[STEP 6] Farming has started. Waiting 3 minutes to build resources before upgrading mastery...")
     task.wait(180)
 
+    -- STEP 7: MASTERY UPGRADE LOOP
+    print("[STEP 7] Starting mastery upgrade loop.")
     local masteryGoalsMet = false
-    local eventAreaUnlocked = false
-    local zenTeleportPath = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn"
-    local zenFarmingPosition = Vector3.new(-36, 15973, 47) -- Corrected Rainbow Egg hatch spot in Zen
-
     while not masteryGoalsMet do
-        -- Check and Engage Rainbow Rift
-        local riftInstance = isRiftValid("rainbow-egg-rift")
-        if riftInstance then
-            print("Rainbow Egg Rift detected! Engaging.")
-            engageRift(riftInstance)
-        end
-
-        -- Check if we can unlock the event area
-        if not eventAreaUnlocked and getCurrency("Gems") >= StarterRoutineConfig.GEMS_FOR_EVENT_AREA then
-            print("[STEP 9] Reached 150,000 gems! Unlocking event area...")
-            -- !! USER ACTION REQUIRED !!
-            -- The remote event to unlock the event area needs to be added below.
-            -- Example: RemoteEvent:FireServer("UnlockSpecialEvent")
-            print("Placeholder for Event Unlock Remote. Please replace.")
-            eventAreaUnlocked = true
-        end
-
-        -- Mastery Upgrade Logic
-        local playerData = LocalData:Get()
-        local currentMasteryLevels = playerData.MasteryLevels or {}
-        local canAffordUpgrade = false
         masteryGoalsMet = true -- Assume goals are met until a check fails
+        local canAffordAnyUpgrade = false
 
         for pathName, targetLevel in pairs(StarterRoutineConfig.TargetLevels) do
-            local currentLevel = currentMasteryLevels[pathName] or 0
+            local currentLevel = (LocalData:Get().MasteryLevels or {})[pathName] or 0
             if currentLevel < targetLevel then
                 masteryGoalsMet = false -- A goal is not met
                 local nextLevelData = MasteryData.Upgrades[pathName].Levels[currentLevel + 1]
                 if nextLevelData and getCurrency(nextLevelData.Cost.Currency) >= nextLevelData.Cost.Amount then
                     print("Upgrading '" .. pathName .. "' from level " .. currentLevel .. " to " .. (currentLevel + 1))
                     RemoteEvent:FireServer("UpgradeMastery", pathName)
-                    canAffordUpgrade = true
+                    canAffordAnyUpgrade = true
                     task.wait(1.5)
-                    break -- Break to re-check priorities after an upgrade
+                    break -- Re-check all masteries after one upgrade
                 end
             end
         end
 
-        -- Farming Logic
-        if not canAffordUpgrade then
-            -- Teleport to Zen if not already there
-            if not isPlayerNear(zenFarmingPosition, 500) then
-                print("Not near Zen. Teleporting to farm...")
-                RemoteEvent:FireServer("Teleport", zenTeleportPath)
-                task.wait(3) -- Wait for teleport to complete
-            end
-            
-            -- Move to Rainbow Egg spot to hatch while farming
-            performMovement(zenFarmingPosition)
-
-            -- Hatch one egg
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05);
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait(0.05);
+        if not canAffordAnyUpgrade and not masteryGoalsMet then
+            print("Cannot afford next mastery upgrade. Farming continues in background...")
+            task.wait(10) -- Wait before checking again
         end
-        task.wait(1) -- General delay for the loop
     end
 
+    farmingActive = false -- Stop the background farming loop
     print("[STEP 8] All mastery goals have been met!")
 
-    -- STEP 10: FARM FESTIVAL COINS
-    if eventAreaUnlocked then
-        print("[STEP 10] Moving to farm Festival Coins...")
-        local festivalFarmingPosition = Vector3.new(206, 22, 183)
-        performMovement(festivalFarmingPosition)
-        print("Now in position to farm Festival Coins. Routine will end here for now.")
-    end
-
-    -- STEP 11: FINAL CHECK FOR WORLD 2
-    print("[STEP 11] Final check for World 2 requirements...")
-    if getCurrency("Coins") < StarterRoutineConfig.MIN_COINS_FOR_WORLD_2 then
-        print("Coins still below 10 Billion. Returning to Zen to farm...")
-        if not isPlayerNear(zenFarmingPosition, 500) then
-            RemoteEvent:FireServer("Teleport", zenTeleportPath)
-            task.wait(3)
-        end
-        performMovement(Vector3.new(-35, 15973, 45)) -- A spot near Zen chests
-        print("Manual farming may be required to reach 10B coins.")
-    end
-
-    print("--- STARTER ROUTINE COMPLETE! You are ready for World 2. ---")
+    -- Final Steps (Event Area, World 2) would continue here...
+    print("--- STARTER ROUTINE COMPLETE! ---")
 end)
