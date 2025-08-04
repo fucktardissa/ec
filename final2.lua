@@ -1,20 +1,19 @@
 --[[
     ================================================================
-    -- ## ONE-CLICK STARTER ROUTINE SCRIPT (V3.1 - POTION FIX) ##
+    -- ## ONE-CLICK STARTER ROUTINE SCRIPT (V3.3 - COLLECTION FIX) ##
     ================================================================
     --
     -- DESCRIPTION:
     -- This script automates the entire early-game progression.
-    -- It is designed to be run once on a new account to quickly
-    -- unlock content, use starting items, upgrade essential masteries,
-    -- and prepare the player for World 2.
     --
-    -- V3.1 FIXES:
-    -- - Corrected the potion usage logic to fire the remote event
-    --   with an amount of 1, matching the working test script.
-    --   This prevents the server from rejecting the request to
-    --   use an entire stack of potions at once.
-    -- - Added more detailed print statements for clarity.
+    -- V3.3 FIXES:
+    -- - Overhauled the `collectNearbyPickups` function to be more reliable.
+    -- - Removed a restrictive check that prevented the script from finding
+    --   the resource container.
+    -- - Correctly implemented the logic to ignore items with "Egg" in
+    --   their name during collection.
+    -- - Added better console feedback to show when collection is running
+    --   and how many items were collected in each cycle.
     --
 ]]
 
@@ -49,7 +48,7 @@ local StarterRoutineConfig = {
 ]]
 
 -- ## Setup: Services, Modules, and Helper Functions ##
-print("--- LOADING STARTER ROUTINE V3.1 SERVICES & MODULES ---")
+print("--- LOADING STARTER ROUTINE V3.3 SERVICES & MODULES ---")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -97,7 +96,6 @@ local function useBestPotionsFromList(potionTypes)
     end
 
     for _, potionNameToFind in ipairs(potionTypes) do
-        task.wait(0.2) -- Small delay before searching for the next potion
         print("Searching for best '"..potionNameToFind.."' potion...")
         local bestPotionFound = nil
         
@@ -115,9 +113,6 @@ local function useBestPotionsFromList(potionTypes)
             print("-> Best found: '" .. bestPotionFound.Name .. "' (Level " .. bestPotionFound.Level .. "). You have " .. bestPotionFound.Amount .. ".")
             print("--> Attempting to use 1...")
             
-            -- ## THE FIX IS HERE ##
-            -- We are now sending '1' as the amount to use, not 'bestPotionFound.Amount'.
-            -- This prevents the server from rejecting the request.
             local success, err = pcall(function()
                 RemoteEvent:FireServer("UsePotion", bestPotionFound.Name, bestPotionFound.Level, 1)
             end)
@@ -127,7 +122,8 @@ local function useBestPotionsFromList(potionTypes)
             else
                 warn("--> ERROR: Firing 'UsePotion' event failed: " .. tostring(err))
             end
-            task.wait(0.5) -- Wait for the server to process before trying the next potion
+            -- Wait for the server to process before trying the next potion
+            task.wait(1) 
         else
             print("-> No potions of type '"..potionNameToFind.."' found in your inventory.")
         end
@@ -148,27 +144,31 @@ local function useAllGoldenOrbs()
     end
 end
 
--- Helper function to collect nearby resources
+-- ## COLLECTION FIX ## Helper function to collect nearby resources
 local function collectNearbyPickups()
     local collectRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Pickups"):WaitForChild("CollectPickup")
     local renderedFolder = workspace:WaitForChild("Rendered")
     local collectedCount = 0
+    -- Always print the collection attempt for better feedback
+    print("-> Checking for nearby resources to collect...")
     for _, child in ipairs(renderedFolder:GetChildren()) do
-        -- Ignore models that contain "Egg" in their name
-        if child:IsA("Model") and not string.match(child.Name, "Egg") and child.Name == "Chunker" then
+        -- The container for pickups is often named 'Chunker'. We removed the restrictive IsA("Model") check.
+        if child.Name == "Chunker" then
             for _, item in ipairs(child:GetChildren()) do
-                pcall(function()
-                    collectRemote:FireServer(item.Name)
-                    item:Destroy()
-                    collectedCount = collectedCount + 1
-                end)
-                task.wait()
+                -- Check the ITEM's name for "Egg", not the folder's name.
+                if not string.match(item.Name, "Egg") then
+                    pcall(function()
+                        collectRemote:FireServer(item.Name)
+                        item:Destroy() -- Destroy locally to prevent re-collection
+                        collectedCount = collectedCount + 1
+                    end)
+                    task.wait() -- Small delay between collections
+                end
             end
         end
     end
-    if collectedCount > 0 then
-        print("Collected " .. collectedCount .. " nearby pickups.")
-    end
+    -- Report the result, even if it's zero.
+    print("--> Collected " .. collectedCount .. " nearby pickups in this cycle.")
 end
 
 print("--- ALL SERVICES & MODULES LOADED SUCCESSFULLY ---")
@@ -178,6 +178,15 @@ print("--- ALL SERVICES & MODULES LOADED SUCCESSFULLY ---")
 -- ============================
 task.spawn(function()
     print("--- STARTER ROUTINE INITIATED ---")
+
+    -- ## NEW STEP: WAIT FOR PLAYER DATA TO LOAD ##
+    print("[STEP -1] Waiting for player data to synchronize with the server...")
+    while not (LocalData:Get() and LocalData:Get().Potions) do
+        print("Data not ready, waiting...")
+        task.wait(1)
+    end
+    print("[STEP -1] Player data loaded successfully!")
+    task.wait(2) -- Extra buffer just in case
 
     -- STEP 0: UNLOCK ALL ISLANDS
     print("[STEP 0] Unlocking all available islands...")
