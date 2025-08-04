@@ -1,4 +1,4 @@
--- Master Auto-Index, Rift & Potion Script (Normal Rift Priority)
+-- Master Auto-Index, Rift & Potion Script (Normal Rift Priority) far tdfart awfasgf sawf  waegftagwe
 
 --[[
     ============================================================
@@ -18,7 +18,7 @@ local Config = {
     AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX = false,
 
     -- ## FINAL FALLBACK: EGG HATCHING ##
-    HATCH_1X_EGG_AS_INDEX = true,
+    HATCH_1X_EGG_AS_INDEX = false,
     HATCH_1X_EGG = {"Spikey-Egg"},
     FallbackHatchDuration = 10.0,
     
