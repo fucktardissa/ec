@@ -1,4 +1,4 @@
--- Master Auto-Complete Index Script
+-- Master Auto-Index, Rift & Potion Script (Final Priority Logic)
 
 --[[
     ============================================================
@@ -6,17 +6,29 @@
     ============================================================
 ]]
 local Config = {
-    -- Set one or more of these to true to begin.
-    -- The script will work on them in the order listed below.
+    -- ## PRIMARY GOAL: STANDARD RIFT HUNTING ##
+    -- If all AUTO_COMPLETE settings are false, or if no index-specific actions
+    -- can be taken, the script will default to this mode.
+    RIFT_EGGS = {"Spikey-Egg"},
+    MIN_RIFT_MULTIPLIER = 5,
+
+    -- ## SECONDARY GOAL: INDEX COMPLETION ##
+    -- If no standard rifts are found, should the script work on the index?
+    INDEX_AS_FALLBACK = true,
     AUTO_COMPLETE_OVERWORLD_INDEX = true,
     AUTO_COMPLETE_OVERWORLD_SHINY_INDEX = false,
     AUTO_COMPLETE_MINIGAME_PARADISE_INDEX = false,
     AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX = false,
 
-    -- Rift settings used by the index script
-    MIN_RIFT_MULTIPLIER = 5,
+    -- ## FINAL FALLBACK: EGG HATCHING ##
+    -- If both standard rifts and index tasks are unavailable, what egg should it hatch?
+    -- If true, it will find a missing index pet and go to its egg.
+    HATCH_1X_EGG_AS_INDEX = true,
+    -- If the above is false, it will hatch this specific egg instead.
+    HATCH_1X_EGG = {"Spikey-Egg"},
+    FallbackHatchDuration = 10.0,
     
-    -- Potion settings used by the index script
+    -- ## POTION SETTINGS ##
     POTIONS_WHEN_RIFT = {"Lucky", "Coins", "Speed", "Mythic"},
     POTIONS_WHEN_25X_RIFT = {"Lucky", "Coins", "Speed", "Mythic", "Infinity Elixir"}
 }
@@ -61,17 +73,17 @@ local IndexData = {
         ["Neon Egg"] = {"Neon Doggy", "Hologram Dragon", "Disco Ball", "Neon Wyvern", "Neon Wire Eye", "Equalizer"}
     }
 }
-local PetToEggMap, EggToRiftMap = {}, {}
+local PetToEggMap, EggToRiftMap, PetToWorldMap = {}, {}, {}
 for worldName, eggs in pairs(IndexData) do
     for eggName, pets in pairs(eggs) do
-        local riftName = eggName:gsub(" ", "-"):lower()
-        EggToRiftMap[eggName] = riftName .. "-egg" -- More accurate rift naming
+        local riftName = eggName:gsub(" ", "-"):lower() .. "-egg"
+        EggToRiftMap[eggName] = riftName
         for _, petName in ipairs(pets) do
             PetToEggMap[petName] = eggName
+            PetToWorldMap[petName] = worldName
         end
     end
 end
-
 local EggsWithoutRifts = {["Common Egg"]=true, ["Spotted Egg"]=true, ["Iceshard Egg"]=true, ["Showman Egg"]=true}
 local shinyRequirements = {["Common"] = 16, ["Unique"] = 16, ["Rare"] = 12, ["Epic"] = 12, ["Legendary"] = 10}
 local world1TeleportPoints = {{name = "Zen", path = "Workspace.Worlds.The Overworld.Islands.Zen.Island.Portal.Spawn", height = 15970}, {name = "The Void", path = "Workspace.Worlds.The Overworld.Islands.The Void.Island.Portal.Spawn", height = 10135}, {name = "Twilight", path = "Workspace.Worlds.The Overworld.Islands.Twilight.Island.Portal.Spawn", height = 6855}, {name = "Outer Space", path = "Workspace.Worlds.The Overworld.Islands.Outer Space.Island.Portal.Spawn", height = 2655}}
@@ -83,8 +95,7 @@ local VERTICAL_SPEED, HORIZONTAL_SPEED = 300, 30
 local function findBestPotionsFromList(potionNames)
     local playerData = LocalData:Get()
     if not (playerData and playerData.Potions) then return {} end
-    local bestPotions = {}
-    local wantedPotions = {}
+    local bestPotions, wantedPotions = {}, {}
     for _, name in ipairs(potionNames) do wantedPotions[name] = true end
     for _, potionData in pairs(playerData.Potions) do
         if wantedPotions[potionData.Name] then
@@ -98,7 +109,7 @@ end
 
 local function usePotions(potionList)
     if #potionList == 0 then return end
-    print("Finding and using the best potions from the list...")
+    print("Finding and using the best potions...")
     local bestPotionsFound = findBestPotionsFromList(potionList)
     if not next(bestPotionsFound) then print("-> You do not own any of the required potions.") return end
     for _, potionData in pairs(bestPotionsFound) do
@@ -151,10 +162,7 @@ local function teleportToClosestPoint(targetHeight, teleportPoints, worldName)
     local smallestDifference = math.huge
     for _, point in ipairs(teleportPoints) do
         local difference = math.abs(point.height - targetHeight)
-        if difference < smallestDifference then
-            smallestDifference = difference
-            closestPoint = point
-        end
+        if difference < smallestDifference then smallestDifference = difference; closestPoint = point; end
     end
     print("Teleporting to closest portal in " .. worldName .. ": " .. closestPoint.name)
     RemoteEvent:FireServer("Teleport", closestPoint.path)
@@ -169,10 +177,7 @@ local function performMovement(targetPosition)
     local originalCameraType, originalCameraSubject = camera.CameraType, camera.CameraSubject
     camera.CameraType = Enum.CameraType.Scriptable
     local cameraConnection = RunService.RenderStepped:Connect(function()
-        local lookVector = humanoidRootPart.CFrame.LookVector
-        local cameraOffset = Vector3.new(0, 10, 25)
-        local cameraPosition = humanoidRootPart.Position - (lookVector * 15) + cameraOffset
-        camera.CFrame = CFrame.lookAt(cameraPosition, humanoidRootPart.Position)
+        camera.CFrame = CFrame.lookAt(humanoidRootPart.Position - (humanoidRootPart.CFrame.LookVector * 15) + Vector3.new(0, 10, 25), humanoidRootPart.Position)
     end)
     local originalCollisions = {}
     for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then originalCollisions[part] = part.CanCollide; part.CanCollide = false; end end
@@ -192,17 +197,17 @@ local function performMovement(targetPosition)
 end
 
 local function openRift()
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
-    task.wait(0.1)
-    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game); task.wait(0.1); VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+end
+
+local function openRegularEgg()
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(); VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game); task.wait()
 end
 
 local function getMissingPets(mode)
     local discoveredPets = LocalData:Get().Discovered or {}
-    local requiredPets = {}
-    local isShiny = mode:find("Shiny")
+    local requiredPets, isShiny = {}, mode:find("Shiny")
     local world = mode:find("Overworld") and "Overworld" or "MinigameParadise"
-
     for _, petList in pairs(IndexData[world]) do
         for _, petName in ipairs(petList) do table.insert(requiredPets, petName) end
     end
@@ -216,120 +221,156 @@ end
 local function getNormalPetCount(petName)
     local count = 0
     for _, petInstance in pairs(LocalData:Get().Pets) do
-        if petInstance.Name == petName and not petInstance.Shiny and not petInstance.Mythic then
-            count = count + (petInstance.Amount or 1)
-        end
+        if petInstance.Name == petName and not petInstance.Shiny and not petInstance.Mythic then count = count + (petInstance.Amount or 1) end
     end
     return count
 end
 
 local function findPetInstanceForCrafting(petName)
     for _, petInstance in pairs(LocalData:Get().Pets) do
-        if petInstance.Name == petName and not petInstance.Shiny and not petInstance.Mythic then
-            return petInstance.Id
-        end
+        if petInstance.Name == petName and not petInstance.Shiny and not petInstance.Mythic then return petInstance.Id end
     end
     return nil
 end
 
-local function EngageRift(riftNameToFind)
-    print("Now hunting specifically for rift: " .. riftNameToFind)
-    while getgenv().Config.AUTO_COMPLETE_OVERWORLD_INDEX do
-        local targetRift = isRiftValid(riftNameToFind)
-        if targetRift and getRiftMultiplier(targetRift) >= (getgenv().Config.MIN_RIFT_MULTIPLIER or 0) then
-            -- Found it, now engage
-            local multiplier = getRiftMultiplier(targetRift)
-            if multiplier >= 25 and #getgenv().Config.POTIONS_WHEN_25X_RIFT > 0 then
-                usePotions(getgenv().Config.POTIONS_WHEN_25X_RIFT)
-            elseif #getgenv().Config.POTIONS_WHEN_RIFT > 0 then
-                usePotions(getgenv().Config.POTIONS_WHEN_RIFT)
-            end
-
-            local movementAttempts, maxAttempts, inPosition = 0, 3, false
-            while isCorrectRiftStillValid(targetRift) and movementAttempts < maxAttempts and not inPosition do
-                movementAttempts = movementAttempts + 1
-                local targetPosition = targetRift.Display.Position + Vector3.new(0, 4, 0)
-                local isWorld2Rift = false
-                for _, keyword in ipairs(world2RiftKeywords) do
-                    if riftNameToFind:find(string.lower(keyword)) then isWorld2Rift = true; break end
-                end
-                if isWorld2Rift then teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
-                else teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1") end
-                task.wait(5)
-                performMovement(targetPosition)
-                task.wait(1)
-                if isPlayerNearRift(targetRift, 15) then inPosition = true
-                else warn("Proximity check failed. Retrying...") end
-            end
-
-            if inPosition then
-                print("Hatching rift...")
-                while isCorrectRiftStillValid(targetRift) do openRift(); task.wait(0.5) end
-                print("Rift is gone.")
-            else
-                warn("Failed to get near the rift. Moving on.")
-            end
-            return -- Exit the EngageRift function
+local function EngageRift(riftInstance, riftNameFromConfig)
+    print("Engaging target rift: " .. riftInstance.Name)
+    local multiplier = getRiftMultiplier(riftInstance)
+    if multiplier >= 25 and #getgenv().Config.POTIONS_WHEN_25X_RIFT > 0 then usePotions(getgenv().Config.POTIONS_WHEN_25X_RIFT)
+    elseif #getgenv().Config.POTIONS_WHEN_RIFT > 0 then usePotions(getgenv().Config.POTIONS_WHEN_RIFT) end
+    local movementAttempts, maxAttempts, inPosition = 0, 3, false
+    while isCorrectRiftStillValid(riftInstance) and movementAttempts < maxAttempts and not inPosition do
+        movementAttempts = movementAttempts + 1
+        local targetPosition = riftInstance.Display.Position + Vector3.new(0, 4, 0)
+        local isWorld2Rift = false
+        for _, keyword in ipairs(world2RiftKeywords) do
+            if string.lower(riftNameFromConfig):find(string.lower(keyword)) then isWorld2Rift = true; break end
         end
-        print("Rift not found. Waiting...")
-        task.wait(10)
+        if isWorld2Rift then teleportToClosestPoint(targetPosition.Y, world2TeleportPoints, "World 2")
+        else teleportToClosestPoint(targetPosition.Y, world1TeleportPoints, "World 1") end
+        task.wait(5)
+        performMovement(targetPosition)
+        task.wait(1)
+        if isPlayerNearRift(riftInstance, 15) then inPosition = true
+        else warn("Proximity check failed. Retrying...") end
+    end
+    if inPosition then
+        print("Hatching rift...")
+        while isCorrectRiftStillValid(riftInstance) do openRift(); task.wait(0.5) end
+        print("Rift is gone.")
+    else warn("Failed to get near the rift.") end
+end
+
+local function PerformFallbackHatch()
+    print("No standard or index rifts available. Proceeding to final fallback hatch.")
+    local eggToHatchName = ""
+    local cfg = getgenv().Config
+
+    if cfg.HATCH_1X_EGG_AS_INDEX then
+        print("Fallback Mode: Hatching a needed index egg.")
+        local missingForIndex = getMissingPets("Overworld") or getMissingPets("MinigameParadise") or getMissingPets("OverworldShiny") or getMissingPets("MinigameParadiseShiny")
+        if missingForIndex then
+            eggToHatchName = PetToEggMap[missingForIndex:gsub("Shiny ", "")]
+        end
+    else
+        print("Fallback Mode: Hatching HATCH_1X_EGG.")
+        if cfg.HATCH_1X_EGG[1] then
+            eggToHatchName = cfg.HATCH_1X_EGG[1]:gsub("-", " ")
+        end
+    end
+
+    if eggToHatchName and eggToHatchName ~= "" then
+        local eggPos = eggPositions[eggToHatchName]
+        if eggPos then
+            print("Final fallback target: " .. eggToHatchName)
+            local world = PetToWorldMap[eggToHatchName] or "Overworld"
+            if world == "MinigameParadise" then RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.FastTravel.Spawn")
+            else RemoteEvent:FireServer("Teleport", "Workspace.Worlds.The Overworld.FastTravel.Spawn") end
+            task.wait(3)
+            performMovement(eggPos)
+            local hatchEndTime = tick() + cfg.FallbackHatchDuration
+            while tick() < hatchEndTime do openRegularEgg() end
+        else
+            print("Could not find position for fallback egg: " .. eggToHatchName)
+        end
+    else
+        print("No fallback egg could be determined. Waiting.")
     end
 end
 
+
 -- ## Main Automation Loop ##
-print("Master Auto-Index script started.")
+print("Master Script Started.")
 task.spawn(function()
     while true do
         local cfg = getgenv().Config
-        local currentMode = ""
-        
-        if cfg.AUTO_COMPLETE_OVERWORLD_INDEX then currentMode = "Overworld"
-        elseif cfg.AUTO_COMPLETE_OVERWORLD_SHINY_INDEX then currentMode = "OverworldShiny"
-        elseif cfg.AUTO_COMPLETE_MINIGAME_PARADISE_INDEX then currentMode = "MinigameParadise"
-        elseif cfg.AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX then currentMode = "MinigameParadiseShiny"
-        else print("All index modes are disabled or complete. Script finished."); break end
-        
-        print("Current objective: " .. currentMode .. " Index")
-        local missingPet = getMissingPets(currentMode)
+        local actionTaken = false
 
-        if not missingPet then
-            print("SUCCESS: " .. currentMode .. " Index is complete!")
-            if currentMode == "Overworld" then cfg.AUTO_COMPLETE_OVERWORLD_INDEX = false
-            elseif currentMode == "OverworldShiny" then cfg.AUTO_COMPLETE_OVERWORLD_SHINY_INDEX = false
-            elseif currentMode == "MinigameParadise" then cfg.AUTO_COMPLETE_MINIGAME_PARADISE_INDEX = false
-            elseif currentMode == "MinigameParadiseShiny" then cfg.AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX = false end
-            task.wait(3)
-            continue
+        -- ## PRIORITY 1: STANDARD RIFT HUNTING ##
+        print("Searching for standard rifts from config...")
+        for _, riftName in ipairs(cfg.RIFT_EGGS) do
+            local riftInstance = isRiftValid(riftName)
+            if riftInstance and getRiftMultiplier(riftInstance) >= cfg.MIN_RIFT_MULTIPLIER then
+                EngageRift(riftInstance, riftName)
+                actionTaken = true
+                break
+            end
         end
 
-        print("Next target for index: '" .. missingPet .. "'")
-        
-        if missingPet:find("Shiny ") then
-            local basePetName = missingPet:gsub("Shiny ", "")
-            local petDBInfo = PetDatabase[basePetName]
-            local requiredAmount = shinyRequirements[petDBInfo.Rarity] or 10
-            
-            if getNormalPetCount(basePetName) >= requiredAmount then
-                print("Have enough '" .. basePetName .. "' to craft. Crafting shiny...")
-                local instanceId = findPetInstanceForCrafting(basePetName)
-                if instanceId then RemoteEvent:FireServer("MakePetShiny", instanceId); task.wait(2)
-                else warn("Could not find an instance of '"..basePetName.."' to craft with."); task.wait(5) end
-            else
-                print("Not enough '" .. basePetName .. "' to craft. Hunting for rift...")
-                local eggName = PetToEggMap[basePetName]
-                if EggsWithoutRifts[eggName] then
-                    print("Warning: '"..basePetName.."' is from an egg with no rift. Cannot auto-hatch."); task.wait(10)
+        -- ## PRIORITY 2: INDEX AS FALLBACK ##
+        if not actionTaken and cfg.INDEX_AS_FALLBACK then
+            local isIndexModeActive = cfg.AUTO_COMPLETE_OVERWORLD_INDEX or cfg.AUTO_COMPLETE_OVERWORLD_SHINY_INDEX or cfg.AUTO_COMPLETE_MINIGAME_PARADISE_INDEX or cfg.AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX
+            if isIndexModeActive then
+                local currentMode = ""
+                if cfg.AUTO_COMPLETE_OVERWORLD_INDEX then currentMode = "Overworld"
+                elseif cfg.AUTO_COMPLETE_OVERWORLD_SHINY_INDEX then currentMode = "OverworldShiny"
+                elseif cfg.AUTO_COMPLETE_MINIGAME_PARADISE_INDEX then currentMode = "MinigameParadise"
+                elseif cfg.AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX then currentMode = "MinigameParadiseShiny" end
+                
+                print("Standard rifts not found. Checking for index tasks. Objective: " .. currentMode)
+                local missingPet = getMissingPets(currentMode)
+
+                if not missingPet then
+                    print("SUCCESS: " .. currentMode .. " Index is complete!")
+                    if currentMode == "Overworld" then cfg.AUTO_COMPLETE_OVERWORLD_INDEX = false
+                    elseif currentMode == "OverworldShiny" then cfg.AUTO_COMPLETE_OVERWORLD_SHINY_INDEX = false
+                    elseif currentMode == "MinigameParadise" then cfg.AUTO_COMPLETE_MINIGAME_PARADISE_INDEX = false
+                    elseif currentMode == "MinigameParadiseShiny" then cfg.AUTO_COMPLETE_SHINY_MINIGAME_PARADISE_INDEX = false end
+                    actionTaken = true
                 else
-                    EngageRift(EggToRiftMap[eggName])
+                    print("Next index target: '" .. missingPet .. "'")
+                    local basePetName = missingPet:gsub("Shiny ", "")
+                    local eggName = PetToEggMap[basePetName]
+
+                    if missingPet:find("Shiny ") then
+                        local petDBInfo = PetDatabase[basePetName]
+                        local requiredAmount = shinyRequirements[petDBInfo.Rarity] or 10
+                        if getNormalPetCount(basePetName) >= requiredAmount then
+                            print("Have enough to craft '"..missingPet.."''. Crafting...")
+                            local instanceId = findPetInstanceForCrafting(basePetName)
+                            if instanceId then RemoteEvent:FireServer("MakePetShiny", instanceId); task.wait(2) else warn("Could not find an instance of '"..basePetName.."' to craft with.") end
+                            actionTaken = true
+                        end
+                    end
+                    
+                    if not actionTaken and not EggsWithoutRifts[eggName] then
+                        local indexRiftName = EggToRiftMap[eggName]
+                        local riftInstance = isRiftValid(indexRiftName)
+                        if riftInstance and getRiftMultiplier(riftInstance) >= cfg.MIN_RIFT_MULTIPLIER then
+                            print("Found active index rift: " .. riftInstance.Name)
+                            EngageRift(riftInstance, indexRiftName)
+                            actionTaken = true
+                        end
+                    end
                 end
             end
-        else
-            local eggName = PetToEggMap[missingPet]
-            if EggsWithoutRifts[eggName] then
-                print("Warning: '"..missingPet.."' is from an egg with no rift. Cannot auto-hatch."); task.wait(10)
-            else
-                EngageRift(EggToRiftMap[eggName])
-            end
         end
+
+        -- ## PRIORITY 3: FINAL FALLBACK HATCHING ##
+        if not actionTaken then
+            PerformFallbackHatch()
+        end
+        
+        task.wait(5)
     end
 end)
