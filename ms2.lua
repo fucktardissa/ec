@@ -7,10 +7,7 @@
 ]]
 local Config = {
     -- Set to false in your executor to stop the script
-    AutoMilestones = true,
-    
-    -- Delay in seconds between finishing one minigame and starting the next
-    CycleDelay = 0
+    AutoMilestones = true
 }
 getgenv().Config = Config
 
@@ -28,25 +25,6 @@ local RemoteEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Frame
 local LocalData = require(ReplicatedStorage.Client.Framework.Services.LocalData)
 local MilestonesModule = require(ReplicatedStorage.Shared.Data.Milestones)
 
--- ## Anti-Transition Patcher ##
-local function patchTransitions()
-    pcall(function()
-        print("Applying anti-transition patch...")
-        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-        local ScreenGui = PlayerGui:WaitForChild("ScreenGui")
-        if ScreenGui then
-            local Transition = ScreenGui:FindFirstChild("Transition")
-            if Transition then
-                Transition.Enabled = false
-                print("-> Transition screen disabled.")
-            else
-                warn("-> Could not find Transition screen to disable.")
-            end
-        end
-    end)
-end
-patchTransitions() -- Run the patch at the start
-
 -- ## Helper Functions ##
 local function formatTaskDescription(task)
     local parts = {}
@@ -57,28 +35,20 @@ local function formatTaskDescription(task)
     return table.concat(parts, " ")
 end
 
-local function playMinigame(name, difficulty)
+-- This is the new "fast" function with cooldowns removed
+local function playMinigameFast(name, difficulty)
     local targetDifficulty = difficulty or "Easy"
-    print("-> Starting Minigame: '" .. name .. "' on '" .. targetDifficulty .. "' difficulty.")
+    print("-> Spam-starting Minigame: '" .. name .. "' on '" .. targetDifficulty .. "' difficulty.")
     
     RemoteEvent:FireServer("Teleport", "Workspace.Worlds.Minigame Paradise.FastTravel.Spawn")
-    task.wait(3)
+    task.wait(1.5) -- Wait for teleport
 
     RemoteEvent:FireServer("SkipMinigameCooldown", name)
-    task.wait(0.2)
     RemoteEvent:FireServer("StartMinigame", name, targetDifficulty)
-    task.wait(3) -- Wait for minigame to load
-
-    -- ## THE FIX: Apply extra delay BEFORE finishing specific minigames ##
-    if name == "Pet Match" or name == "Cart Escape" then
-        print("-> Applying special 5 second delay before finishing " .. name)
-        task.wait(5)
-    end
-    
+    task.wait(0.5) -- Minimal wait for server to process
     RemoteEvent:FireServer("FinishMinigame")
     
-    print("-> Minigame finished. Waiting for cooldown...")
-    task.wait(getgenv().Config.CycleDelay)
+    print("-> Minigame cycle finished.")
 end
 
 -- ## Main Logic ##
@@ -89,9 +59,9 @@ task.spawn(function()
         [1] = { name = "Robot Claw",   difficulty = "Easy" },
         [2] = { name = "Robot Claw",   difficulty = "Easy" },
         [3] = { name = "Robot Claw",   difficulty = "Easy" },
-        [4] = { name = "Pet Match",    difficulty = "Insane" },
-        [5] = { name = "Cart Escape",  difficulty = "Insane" },
-        [6] = { name = "Robot Claw",   difficulty = "Insane" },
+        [4] = { name = "Pet Match",    difficulty = nil },
+        [5] = { name = "Cart Escape",  difficulty = nil },
+        [6] = { name = "Robot Claw",   difficulty = nil },
         [7] = { name = "Robot Claw",   difficulty = "Hard" },
         [8] = { name = "Robot Claw",   difficulty = "Insane" },
         [9] = { name = "Robot Claw",   difficulty = "Insane" }
@@ -128,11 +98,23 @@ task.spawn(function()
         local taskToDo = milestoneTasks[nextMilestoneNumber]
         
         if taskToDo then
-            playMinigame(taskToDo.name, taskToDo.difficulty)
+            -- ## NEW LOGIC: Check if we should use the external script ##
+            if nextMilestoneNumber == 8 or nextMilestoneNumber == 9 then
+                print("-> Milestone 8 or 9 detected. Handing over to external AutoClaw script.")
+                getgenv().reportTime = 60
+                getgenv().tryCollectMultipleTimes = false
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/IdiotHub/Scripts/refs/heads/main/BGSI/AutoClaw.lua"))()
+                print("-> External script has been executed. Pausing for 60 seconds before re-checking milestones.")
+                task.wait(60)
+            else
+                -- Otherwise, use the fast internal function
+                playMinigameFast(taskToDo.name, taskToDo.difficulty)
+            end
         else
             warn("-> Could not find a hardcoded task for milestone number: " .. nextMilestoneNumber)
             task.wait(5)
         end
+        task.wait(1) -- A small delay between each check to prevent lag
     end
     
     print("--- Auto Minigame Milestones script has stopped. ---")
