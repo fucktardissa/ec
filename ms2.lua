@@ -56,55 +56,56 @@ end
 -- ## Main Logic ##
 task.spawn(function()
     print("--- Starting Auto Minigame Milestones script. ---")
+
+    -- This table now defines the exact task for each of the 9 minigame milestones.
+    local milestoneTasks = {
+        [1] = { name = "Robot Claw",   difficulty = "Easy" },   -- Task: CompleteMinigame(1)
+        [2] = { name = "Robot Claw",   difficulty = "Easy" },   -- Task: CompleteMinigame(5)
+        [3] = { name = "Robot Claw",   difficulty = "Easy" },   -- Task: CompleteMinigame(15)
+        [4] = { name = "Pet Match",    difficulty = "Insane" },      -- Task: CompleteMinigame(15, "Pet Match")
+        [5] = { name = "Cart Escape",  difficulty = "Insane" },      -- Task: CompleteMinigame(15, "Cart Escape")
+        [6] = { name = "Robot Claw",   difficulty = "Insane" },      -- Task: CompleteMinigame(15, "Robot Claw")
+        [7] = { name = "Robot Claw",   difficulty = "Hard" },   -- Task: CompleteMinigame(75, nil, "Hard")
+        [8] = { name = "Robot Claw",   difficulty = "Insane" }, -- Task: CompleteMinigame(125, nil, "Insane")
+        [9] = { name = "Robot Claw",   difficulty = "Insane" }  -- Task: CompleteMinigame(500)
+    }
     
     while getgenv().Config.AutoMilestones do
         local playerData = LocalData:Get()
         local questsCompleted = playerData.QuestsCompleted or {}
         local minigameMilestones = MilestonesModule.Minigames
         
-        local nextMilestoneId, nextMilestoneTask = nil, nil
-        local milestoneCounter = 0
+        local nextMilestoneNumber = 0
 
+        -- Find the first uncompleted minigame milestone number
+        local milestoneCounter = 0
         for tierName, tierData in pairs(minigameMilestones.Tiers) do
             for i, levelData in ipairs(tierData.Levels) do
                 milestoneCounter = milestoneCounter + 1
                 local milestoneId = "milestone-minigame-" .. tostring(milestoneCounter)
-                
                 if not questsCompleted[milestoneId] then
-                    nextMilestoneId = milestoneId
-                    nextMilestoneTask = levelData.Task
+                    nextMilestoneNumber = milestoneCounter
                     break
                 end
             end
-            if nextMilestoneId then break end
+            if nextMilestoneNumber > 0 then break end
         end
 
-        if not nextMilestoneId then
+        if nextMilestoneNumber == 0 then
             print("All minigame milestones are complete! Stopping script.")
             getgenv().Config.AutoMilestones = false
             break
         end
 
-        print("Next milestone to complete: " .. nextMilestoneId)
-        print("  > Task: " .. formatTaskDescription(nextMilestoneTask))
+        print("Next milestone to complete: milestone-minigame-" .. nextMilestoneNumber)
         
-        local minigameName = nextMilestoneTask.Name
-        local minigameDifficulty = nextMilestoneTask.Difficulty
-
-        if not minigameName and (minigameDifficulty == "Hard" or minigameDifficulty == "Insane") then
-            minigameName = "Robot Claw"
-            minigameDifficulty = "Insane" -- Fix: Default to insane
-            print("-> Milestone requires specific difficulty. Defaulting to: " .. minigameName .. " on " .. minigameDifficulty)
-        elseif nextMilestoneTask.Amount and nextMilestoneTask.Amount >= 500 then
-            minigameName = "Robot Claw"
-            minigameDifficulty = "Insane" -- Fix: Default to insane
-            print("-> Milestone requires high completions. Defaulting to: " .. minigameName .. " on " .. minigameDifficulty)
-        end
+        -- Get the task from our hardcoded list
+        local taskToDo = milestoneTasks[nextMilestoneNumber]
         
-        if minigameName then
-            playMinigame(minigameName, minigameDifficulty)
+        if taskToDo then
+            playMinigame(taskToDo.name, taskToDo.difficulty)
         else
-            warn("-> Could not determine which minigame to play for milestone: " .. nextMilestoneId)
+            warn("-> Could not find a hardcoded task for milestone number: " .. nextMilestoneNumber)
             task.wait(5)
         end
     end
