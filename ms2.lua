@@ -67,18 +67,18 @@ local function playMinigame(name, difficulty)
     RemoteEvent:FireServer("SkipMinigameCooldown", name)
     task.wait(0.2)
     RemoteEvent:FireServer("StartMinigame", name, targetDifficulty)
-    task.wait(3)
+    task.wait(3) -- Wait for minigame to load
+
+    -- ## THE FIX: Apply extra delay BEFORE finishing specific minigames ##
+    if name == "Pet Match" or name == "Cart Escape" then
+        print("-> Applying special 5 second delay before finishing " .. name)
+        task.wait(5)
+    end
+    
     RemoteEvent:FireServer("FinishMinigame")
     
     print("-> Minigame finished. Waiting for cooldown...")
-    
-    -- ## NEW: Apply extra delay for specific minigames ##
-    if name == "Pet Match" or name == "Cart Escape" then
-        print("-> Applying extra 5 second delay for " .. name)
-        task.wait(getgenv().Config.CycleDelay + 5)
-    else
-        task.wait(getgenv().Config.CycleDelay)
-    end
+    task.wait(getgenv().Config.CycleDelay)
 end
 
 -- ## Main Logic ##
@@ -89,9 +89,9 @@ task.spawn(function()
         [1] = { name = "Robot Claw",   difficulty = "Easy" },
         [2] = { name = "Robot Claw",   difficulty = "Easy" },
         [3] = { name = "Robot Claw",   difficulty = "Easy" },
-        [4] = { name = "Pet Match",    difficulty = nil },
-        [5] = { name = "Cart Escape",  difficulty = nil },
-        [6] = { name = "Robot Claw",   difficulty = nil },
+        [4] = { name = "Pet Match",    difficulty = "Insane" },
+        [5] = { name = "Cart Escape",  difficulty = "Insane" },
+        [6] = { name = "Robot Claw",   difficulty = "Insane" },
         [7] = { name = "Robot Claw",   difficulty = "Hard" },
         [8] = { name = "Robot Claw",   difficulty = "Insane" },
         [9] = { name = "Robot Claw",   difficulty = "Insane" }
